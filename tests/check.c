@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include "io/bgg.h"
+#include "io/worldfile.h"
 #include "sim/params.h"
 #include "sim/world.h"
 
@@ -263,6 +264,55 @@ static void check_bgg(void)
     remove(path);
 }
 
+/* A world saved part-way and loaded goes on exactly as the one that never
+ * stopped: the same fingerprint frame for frame, in every kind of world. */
+static void check_worldfile(void)
+{
+    static const struct {
+        int w, h, d, pitch;
+    } k[] = {{1000, 1000, 4, 0}, {1000, 1000, 32, 50}, {317, 317, 317, 100}};
+    const char *path = "tests/roundtrip.b3w";
+    for (size_t i = 0; i < sizeof k / sizeof k[0]; i++) {
+        params_set_defaults(&P);
+        P.world_width = k[i].w;
+        P.world_height = k[i].h;
+        P.world_depth = k[i].d;
+        P.pitch_prob = k[i].pitch;
+        jr_set_seed(&g_rng, 77 + (int64_t)i);
+        World a;
+        world_init(&a);
+        world_genesis(&a);
+        for (int f = 0; f < 3000; f++)
+            world_time(&a);
+        char err[256];
+        CHECK(worldfile_save(&a, path, err, sizeof err), "save: %s", err);
+        uint64_t rng_then = g_rng.seed;
+        Params p_then = P;
+        for (int f = 0; f < 3000; f++)
+            world_time(&a);
+        uint64_t straight = world_hash(&a);
+        world_free(&a);
+
+        /* somewhere else entirely, then the file */
+        params_set_defaults(&P);
+        jr_set_seed(&g_rng, 1);
+        World b;
+        world_init(&b);
+        world_genesis(&b);
+        CHECK(worldfile_load(&b, path, err, sizeof err), "load: %s", err);
+        CHECK(g_rng.seed == rng_then && memcmp(&P, &p_then, sizeof P) == 0,
+              "the file did not bring back the dice and the parameters");
+        for (int f = 0; f < 3000; f++)
+            world_time(&b);
+        CHECK(world_hash(&b) == straight, "%dx%dx%d: the loaded world went another way", k[i].w,
+              k[i].h, k[i].d);
+        printf("  %4d x %4d x %4d: saved at frame 3000, loaded, the same at 6000\n", k[i].w,
+               k[i].h, k[i].d);
+        world_free(&b);
+    }
+    remove(path);
+}
+
 int main(void)
 {
     params_set_defaults(&P);
@@ -270,6 +320,7 @@ int main(void)
     check_trig();
     check_bodies();
     check_bgg();
+    check_worldfile();
     check_worlds();
     if (failures) {
         fprintf(stderr, "%d checks failed\n", failures);

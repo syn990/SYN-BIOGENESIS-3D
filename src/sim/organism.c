@@ -71,6 +71,19 @@ static void org_create(Organism *o)
         o->seg_color[i] = o->gc->genes[i % o->gc->ngenes].color;
 }
 
+Organism *org_new_bare(World *w, GeneticCode *gc)
+{
+    Organism *o = calloc(1, sizeof *o);
+    if (!o)
+        abort();
+    o->world = w;
+    o->gc = gc_ref(gc);
+    o->alive = true;
+    o->flash_color = FLASH_NONE;
+    org_create(o);
+    return o;
+}
+
 /* ---- the body ----
  *
  * 0.9 drew each arm as a turtle on the plane: the first gene's theta is the

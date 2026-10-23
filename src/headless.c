@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "headless.h"
+#include "io/worldfile.h"
 #include "options.h"
 #include "sim/params.h"
 #include "sim/world.h"
@@ -35,6 +36,8 @@ static void usage(FILE *f)
           "  --frames N        frames to run (default 25600: 100 time units)\n"
           "  --every N         a CSV row every N time units (default 0: the end only)\n"
           "  --check           check the carbon and energy books every frame\n"
+          "  --load FILE       go on from a saved world (.b3w) instead of a new one\n"
+          "  --save FILE       save the world at the end (.b3w)\n"
           "  --hash            print the final state's fingerprint\n",
           f);
 }
@@ -96,6 +99,7 @@ int headless_main(int argc, char **argv)
     int64_t frames = 25600;
     int every = 0;
     bool check = false, hash = false;
+    const char *load = NULL, *save = NULL;
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         bool more = i + 1 < argc;
@@ -109,6 +113,10 @@ int headless_main(int argc, char **argv)
             check = true;
         else if (strcmp(a, "--hash") == 0)
             hash = true;
+        else if (strcmp(a, "--load") == 0 && more)
+            load = argv[++i];
+        else if (strcmp(a, "--save") == 0 && more)
+            save = argv[++i];
         else if (strcmp(a, "--help") == 0 || strcmp(a, "-h") == 0) {
             usage(stdout);
             return 0;
@@ -125,13 +133,23 @@ int headless_main(int argc, char **argv)
     }
     World w;
     memset(&w, 0, sizeof w);
-    int imported = world_options_genesis(&wo, &w, err, sizeof err);
-    if (imported < 0) {
-        fprintf(stderr, "syn-biogenesis-3d: %s\n", err);
-        return 1;
+    if (load) {
+        world_init(&w);
+        if (!worldfile_load(&w, load, err, sizeof err)) {
+            fprintf(stderr, "syn-biogenesis-3d: %s\n", err);
+            return 1;
+        }
+        fprintf(stderr, "%s: world %d x %d x %d at frame %" PRId64 ", %d alive\n", load, w.width,
+                w.height, w.depth, w.frame, w.population);
+    } else {
+        int imported = world_options_genesis(&wo, &w, err, sizeof err);
+        if (imported < 0) {
+            fprintf(stderr, "syn-biogenesis-3d: %s\n", err);
+            return 1;
+        }
+        fprintf(stderr, "seed %" PRId64 ", world %d x %d x %d, %d random founders, %d imported\n",
+                wo.seed, w.width, w.height, w.depth, w.population - imported, imported);
     }
-    fprintf(stderr, "seed %" PRId64 ", world %d x %d x %d, %d random founders, %d imported\n",
-            wo.seed, w.width, w.height, w.depth, w.population - imported, imported);
 
     double carbon = w.o2 + w.co2;
     WorldCounts last = w.counts;
@@ -153,6 +171,11 @@ int headless_main(int argc, char **argv)
         csv_row(&w, &last);
     if (hash)
         fprintf(stderr, "hash %016" PRIx64 "\n", world_hash(&w));
+    if (save && !worldfile_save(&w, save, err, sizeof err)) {
+        fprintf(stderr, "syn-biogenesis-3d: %s\n", err);
+        world_free(&w);
+        return 1;
+    }
     world_free(&w);
     return 0;
 }

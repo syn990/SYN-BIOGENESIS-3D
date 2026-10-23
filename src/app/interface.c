@@ -205,6 +205,7 @@ static void main_menu(App *a, float x, float y)
         {ACT_SLOWER, "Slower", "Down", ICON_MINUS, false, false, NULL},
         {ACT_NEXT_SEED, "Next seed", "N", ICON_DICE, false, false, NULL},
         {ACT_RESTART, "Restart", "R", ICON_ROTATE, false, false, NULL},
+        {ACT_SAVE, "Save the world", "Ctrl+S", ICON_SAVE, false, false, NULL},
         {0, "SCREENS", NULL, NULL, false, false, NULL},
         {ACT_LIBRARY_TAB, "Library", "L", ICON_DNA, false, a->screen == SCREEN_LIBRARY, NULL},
         {ACT_PARAMS_TAB, "Parameters", "P", ICON_SLIDERS, false, a->screen == SCREEN_PARAMS, NULL},
@@ -249,8 +250,14 @@ static const char *const k_words[] = {
     "help",  "seed",   "next",  "restart", "size",   "pitch",  "organisms", "co2",
     "import", "speed", "pause", "go",      "step",   "theme",  "themes",    "follow",
     "home",  "select", "kill",  "genes",   "hints",  "clear",  "quit",      "colour",
-    "guide", "kind",   "kinds", "set",     "params", "library", "keep",
+    "guide", "kind",   "kinds", "set",     "params", "library", "keep",      "save",
+    "load",  "worlds",
 };
+
+static void print_line(const char *s)
+{
+    shell_print(SHELL_OUT, "%s", s);
+}
 
 static void help(void)
 {
@@ -269,6 +276,7 @@ static void help(void)
         "PARAMETERS AND BEINGS",
         "  params             every parameter and its value  set NAME VALUE",
         "  library            the beings' screen             keep: keep the selected one",
+        "  save [NAME]        save the world (ctrl+s)        load NAME / worlds",
         "FIELD GUIDE",
         "  guide              what every colour does         colour NAME: one, at length",
         "  kind               what the selected one is       kinds: every kind",
@@ -448,6 +456,23 @@ static void run(App *a, const char *entered)
         app_do(a, ACT_LIBRARY_TAB);
     } else if (!strcasecmp(c, "keep")) {
         app_do(a, ACT_KEEP);
+    } else if (!strcasecmp(c, "save")) {
+        char path[1300], err[300];
+        if (app_save_world(a, argc > 1 ? argv[1] : NULL, path, sizeof path, err, sizeof err))
+            shell_print(SHELL_GOOD, "saved: %s", path);
+        else
+            shell_print(SHELL_ERROR, "%s", err);
+    } else if (!strcasecmp(c, "load") && argc > 1) {
+        char err[300];
+        if (app_load_world(a, argv[1], err, sizeof err)) {
+            app_do(a, ACT_HOME);
+            interface_note(a, false, "%s: frame %lld, %d alive", a->loaded, (long long)a->w.frame,
+                           a->w.population);
+        } else {
+            shell_print(SHELL_ERROR, "%s", err);
+        }
+    } else if (!strcasecmp(c, "worlds")) {
+        app_list_worlds(print_line);
     } else if (!strcasecmp(c, "quit")) {
         app_do(a, ACT_QUIT);
     } else {
@@ -523,9 +548,13 @@ void interface_draw(App *a, int w, int h)
             "drag", "turn", "wheel", "zoom", "click", "select", "right-click", "menu",
             "Space", "pause", "Up/Down", "speed", "F", "follow", "N", "next seed",
             "T", "theme", "`", "console", "H", "hide these"};
-        char right[96];
-        snprintf(right, sizeof right, "seed %lld  %d x %d x %d", (long long)a->wo.seed, wd->width,
-                 wd->height, wd->depth);
+        char right[200];
+        if (a->loaded[0])
+            snprintf(right, sizeof right, "%s  %d x %d x %d", a->loaded, wd->width, wd->height,
+                     wd->depth);
+        else
+            snprintf(right, sizeof right, "seed %lld  %d x %d x %d", (long long)a->wo.seed,
+                     wd->width, wd->height, wd->depth);
         shell_hints(w, h, keys, (int)(sizeof keys / sizeof keys[0]) / 2, right);
     }
     /* under a screen's title bar when one is up */

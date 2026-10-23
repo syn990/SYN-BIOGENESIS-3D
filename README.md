@@ -97,8 +97,15 @@ Over it is the SYN-OS interface, in the SYN-OS theme your desktop has on
 | `n`, `r`, home | next seed, restart, the whole box again |
 | `t`, shift+`t`, `h` | next theme, previous theme, hide the key hints |
 | `l`, `p`, `s`, `a` | the library, the parameters, the statistics, the arena (esc: back to the world) |
+| ctrl+`s` | save the world |
 | `` ` `` | the console |
 | esc | drop the selection, then quit |
+
+**Saved worlds** (`.b3w`, in `~/.config/syn-biogenesis-3d/worlds`) hold the
+parameters, the air, the dice and every organism. A world loaded goes on
+exactly as the one saved would have, frame for frame. Save with ctrl+`s`
+or `save [NAME]`; open with `load NAME`, or `--load NAME` on the command
+line, headless too (`--headless --load FILE --save FILE`).
 
 `--shot FILE.ppm` draws one picture and quits (with `--seconds S`, after S
 seconds). `SDL_VIDEODRIVER=offscreen` runs the window without showing it.
@@ -118,6 +125,8 @@ report:
 - checks that bent bodies keep their symmetry and mirror images;
 - balances the carbon and energy books on every frame of four worlds, from
   a slab one body thick to a cube;
+- checks that beings keep every gene through a .bgg, and that a world saved
+  and loaded goes on exactly as one that never stopped;
 - checks that the optimised, unoptimised and (if installed) clang builds
   reach the same state from the same seed.
 

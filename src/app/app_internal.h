@@ -57,6 +57,7 @@ enum {
     ACT_STATS_TAB,
     ACT_ARENA_TAB,
     ACT_KEEP,
+    ACT_SAVE,
 };
 
 typedef enum { SCREEN_WORLD, SCREEN_LIBRARY, SCREEN_PARAMS, SCREEN_STATS, SCREEN_ARENA } Screen;
@@ -82,6 +83,7 @@ typedef struct App {
     float params_scroll;
     History hist;
     Arena *arena;
+    char loaded[128]; /* the saved world it came from, "" for a seed's */
     /* time */
     int speed;
     bool paused;
@@ -109,6 +111,13 @@ void app_do(App *a, int action);
 bool app_make_world(App *a);
 /* One world frame, and the history's sample when a time unit ends. */
 void app_step(App *a);
+/* ~/.config/syn-biogenesis-3d/worlds/NAME.b3w (name: NULL for one made
+ * from the seed and the time); false with err set. */
+bool app_save_world(App *a, const char *name, char *path, size_t pathlen, char *err, int errlen);
+/* NAME (in the worlds folder) or a path. */
+bool app_load_world(App *a, const char *name, char *err, int errlen);
+/* "name  name ..." of the saved worlds, for the console */
+void app_list_worlds(void (*line)(const char *s));
 Organism *app_find(const World *w, int id);
 void app_draw_pose(const Organism *o, double alpha, V3 *pos, Quat *q);
 const char *app_speed_text(const App *a);

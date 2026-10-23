@@ -94,6 +94,8 @@ Organism *world_fast_check_hit(World *w, Organism *o);
 Organism *world_check_hit(World *w, Organism *o);
 
 void world_add_organism(World *w, Organism *child, Organism *parent);
+/* Append an organism as it is, counting nothing (a loaded world's). */
+void world_append_raw(World *w, Organism *o);
 void world_organism_has_died(World *w, Organism *dying, Organism *killer);
 void world_organism_has_been_infected(World *w, Organism *infected, Organism *infector);
 void world_organism_bitten(World *w, Organism *eater, Organism *eaten, double energy);

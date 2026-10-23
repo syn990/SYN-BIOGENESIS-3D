@@ -30,6 +30,7 @@
  *   n / r           next seed / restart      home         camera back to the box
  *   t / shift+t     next / previous theme    h            hide / show the key hints
  *   l / p / s / a   the library / the parameters / the statistics / the arena
+ *   ctrl+s          save the world (~/.config/syn-biogenesis-3d/worlds)
  *   esc             drop the selection, then quit
  */
 
@@ -41,8 +42,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <time.h>
 
 #include "app/app_internal.h"
+#include "io/worldfile.h"
 #include "render/lighting.h"
 #include "sim/params.h"
 #include "ui/gl2d.h"
@@ -79,11 +85,95 @@ bool app_make_world(App *a)
         return false;
     }
     history_reset(&a->hist, &a->w);
+    a->loaded[0] = 0;
     for (long f = 0; f < (long)a->warm * 256; f++)
         app_step(a);
     a->selected = -1;
     a->acc = 0;
     return true;
+}
+
+static void worlds_dir(char *out, size_t n)
+{
+    const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
+    if (xdg && xdg[0])
+        snprintf(out, n, "%s/syn-biogenesis-3d/worlds", xdg);
+    else
+        snprintf(out, n, "%s/.config/syn-biogenesis-3d/worlds", home ? home : ".");
+}
+
+bool app_save_world(App *a, const char *name, char *path, size_t pathlen, char *err, int errlen)
+{
+    char dir[1024];
+    worlds_dir(dir, sizeof dir);
+    for (char *p = dir + 1;; p++) {
+        if (*p == '/' || !*p) {
+            char c = *p;
+            *p = 0;
+            if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
+                snprintf(err, (size_t)errlen, "%s: cannot make the folder", dir);
+                return false;
+            }
+            if (!c)
+                break;
+            *p = c;
+        }
+    }
+    char auto_name[96];
+    if (!name || !name[0]) {
+        snprintf(auto_name, sizeof auto_name, "seed %lld time %lld", (long long)a->wo.seed,
+                 (long long)(a->w.frame / 256));
+        name = auto_name;
+    }
+    snprintf(path, pathlen, "%s/%s.%s", dir, name, WORLDFILE_EXT);
+    return worldfile_save(&a->w, path, err, errlen);
+}
+
+bool app_load_world(App *a, const char *name, char *err, int errlen)
+{
+    char path[1200];
+    if (strchr(name, '/')) {
+        snprintf(path, sizeof path, "%s", name);
+    } else {
+        char dir[1024];
+        worlds_dir(dir, sizeof dir);
+        size_t n = strlen(name);
+        bool ext = n > 4 && !strcmp(name + n - 4, "." WORLDFILE_EXT);
+        snprintf(path, sizeof path, "%s/%s%s", dir, name, ext ? "" : "." WORLDFILE_EXT);
+    }
+    if (!worldfile_load(&a->w, path, err, errlen))
+        return false;
+    const char *base = strrchr(path, '/');
+    snprintf(a->loaded, sizeof a->loaded, "%.120s", base ? base + 1 : path);
+    history_reset(&a->hist, &a->w);
+    a->selected = -1;
+    a->acc = 0;
+    return true;
+}
+
+void app_list_worlds(void (*line)(const char *s))
+{
+    char dir[1024];
+    worlds_dir(dir, sizeof dir);
+    DIR *d = opendir(dir);
+    if (!d) {
+        line("(no saved worlds yet)");
+        return;
+    }
+    struct dirent *e;
+    int n = 0;
+    while ((e = readdir(d))) {
+        size_t len = strlen(e->d_name);
+        if (len > 4 && !strcmp(e->d_name + len - 4, "." WORLDFILE_EXT)) {
+            char s[300];
+            snprintf(s, sizeof s, "  %.*s", (int)(len - 4), e->d_name);
+            line(s);
+            n++;
+        }
+    }
+    closedir(d);
+    if (!n)
+        line("(no saved worlds yet)");
 }
 
 void app_step(App *a)
@@ -430,6 +520,14 @@ void app_do(App *a, int action)
     case ACT_ARENA_TAB:
         a->screen = a->screen == SCREEN_ARENA ? SCREEN_WORLD : SCREEN_ARENA;
         break;
+    case ACT_SAVE: {
+        char path[1300], err[300];
+        if (app_save_world(a, NULL, path, sizeof path, err, sizeof err))
+            interface_note(a, false, "Saved: %s", strrchr(path, '/') + 1);
+        else
+            interface_note(a, true, "%s", err);
+        break;
+    }
     case ACT_KEEP: {
         Organism *o = a->selected >= 0 ? app_find(&a->w, a->selected) : NULL;
         char path[1100], err[300];
@@ -457,6 +555,7 @@ static void usage(FILE *f)
           "  --select ID       start with organism ID selected (-1: the biggest living)\n"
           "  --screen NAME     start on a screen: world, library, parameters, statistics,\n"
           "                    arena\n"
+          "  --load NAME       open a saved world (a name in the worlds folder, or a path)\n"
           "  --arena A B       fight library beings A and B (names) in the arena\n"
           "  --seconds S       quit after S seconds and print the frame rate (with\n"
           "                    --shot, the picture is taken then)\n"
@@ -465,7 +564,7 @@ static void usage(FILE *f)
           "  drag: turn   right-drag: move   wheel: zoom   click: select   right-click: menu\n"
           "  space: pause   .: one frame   up/down: speed   f: follow   `: console\n"
           "  n: next seed   r: restart   home: whole box   t: theme   h: key hints\n"
-          "  l: library   p: parameters   s: statistics   a: arena\n"
+          "  l: library   p: parameters   s: statistics   a: arena   ctrl+s: save the world\n"
           "  esc: drop the selection, then quit\n",
           f);
 }
@@ -513,7 +612,9 @@ static void handle_key(App *a, SDL_Keycode k, SDL_Keymod mods)
             app_do(a, ACT_PARAMS_TAB);
         break;
     case SDLK_s:
-        if (a->interface)
+        if (mods & KMOD_CTRL)
+            app_do(a, ACT_SAVE);
+        else if (a->interface)
             app_do(a, ACT_STATS_TAB);
         break;
     case SDLK_a:
@@ -571,6 +672,7 @@ int app_main(int argc, char **argv)
     double cam[3] = {0, 0, 0}; /* yaw, pitch, distance from --camera; 0 distance keeps home */
     double run_for = 0;        /* --seconds: quit after this long and report the frame rate */
     const char *fight[2] = {NULL, NULL};
+    const char *load = NULL;
     for (int i = 1; i < argc; i++) {
         if (world_option(&a->wo, argc, argv, &i))
             continue;
@@ -581,6 +683,8 @@ int app_main(int argc, char **argv)
             shot = argv[++i];
         else if (strcmp(s, "--seconds") == 0 && i + 1 < argc)
             run_for = atof(argv[++i]);
+        else if (strcmp(s, "--load") == 0 && i + 1 < argc)
+            load = argv[++i];
         else if (strcmp(s, "--arena") == 0 && i + 2 < argc) {
             fight[0] = argv[++i];
             fight[1] = argv[++i];
@@ -618,6 +722,10 @@ int app_main(int argc, char **argv)
     }
     if (!app_make_world(a))
         return 1;
+    if (load && !app_load_world(a, load, err, sizeof err)) {
+        fprintf(stderr, "syn-biogenesis-3d: %s\n", err);
+        return 1;
+    }
     if (!platform_window_create(&a->win, "SYN-BIOGENESIS-3D", win_w, win_h))
         return 1;
     lighting_init();
@@ -654,8 +762,12 @@ int app_main(int argc, char **argv)
     a->speed = 3; /* 60 world frames a second */
     a->alpha = 1;
     a->running = true;
-    interface_note(a, false, "Seed %lld: %d organisms in %d x %d x %d", (long long)a->wo.seed,
-                   a->w.population, a->w.width, a->w.height, a->w.depth);
+    if (a->loaded[0])
+        interface_note(a, false, "%s: frame %lld, %d alive in %d x %d x %d", a->loaded,
+                       (long long)a->w.frame, a->w.population, a->w.width, a->w.height, a->w.depth);
+    else
+        interface_note(a, false, "Seed %lld: %d organisms in %d x %d x %d", (long long)a->wo.seed,
+                       a->w.population, a->w.width, a->w.height, a->w.depth);
 
     if (fight[0] && !(a->interface && arena_start(a, fight[0], fight[1])))
         fprintf(stderr, "syn-biogenesis-3d: no such beings in the library: %s, %s\n", fight[0],

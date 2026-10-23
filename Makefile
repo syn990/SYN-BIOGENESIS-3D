@@ -16,7 +16,7 @@ LDLIBS = -lm
 PKG_CONFIG ?= pkg-config
 
 SIM = src/sim/dmath.c src/sim/jrandom.c src/sim/params.c src/sim/genetic_code.c \
-      src/sim/organism.c src/sim/world.c src/io/bgg.c
+      src/sim/organism.c src/sim/world.c src/io/bgg.c src/io/worldfile.c
 CORE = src/options.c src/headless.c
 WIN = src/app/app.c src/app/interface.c src/app/screens.c src/app/library.c \
       src/app/history.c src/app/stats.c src/app/arena.c src/platform/window.c src/render/shader.c \

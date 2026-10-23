@@ -84,6 +84,9 @@ typedef struct Organism {
 
 /* new Organism(): no body yet. Draws one random turn, as 0.9 drew theta. */
 Organism *org_new(struct World *w);
+/* An organism carrying gc, its segments' arrays made and coloured, without
+ * a draw from the dice: what a loaded world is rebuilt from. */
+Organism *org_new_bare(struct World *w, GeneticCode *gc);
 void org_free(Organism *o);
 
 /* A random founder (World.genesis): code from the dice, energy from CO2. */

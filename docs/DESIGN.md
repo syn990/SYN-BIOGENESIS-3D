@@ -77,9 +77,18 @@ not), and the carbon and energy books balance on every frame.
        options, parameters and code. What is shown is therefore the round
        that was scored, by the determinism the tests check.
 
-Later: the arena, the telescope (the dice are the same java.util.Random,
-so every gene is still a place on its seed's stream), the being library and
-saved worlds.
+Since built: the arena, the being library and saved worlds (`.b3w`,
+`src/io/worldfile.c`).
+- A saved world holds the parameters, the dice's state and every organism
+  between two frames.
+- It holds every genetic code once. Organisms that share a code (an
+  import's copies, a virus's victims) share it again after loading, because
+  the rules compare codes by identity.
+- A loaded world goes on bit for bit as the saved one would have;
+  `tests/check.c` checks this in a slab, the default world and a cube.
+
+Later: the telescope (the dice are the same java.util.Random, so every gene
+is still a place on its seed's stream).
 
 ## Kept from 0.9, unchanged
 

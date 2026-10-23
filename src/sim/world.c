@@ -120,7 +120,7 @@ double world_photosynthesis(World *w, double q)
 
 /* ---- events ---- */
 
-static void world_append(World *w, Organism *o)
+void world_append_raw(World *w, Organism *o)
 {
     if (w->norgs == w->cap) {
         w->cap = w->cap ? w->cap * 2 : 64;
@@ -135,7 +135,7 @@ void world_add_organism(World *w, Organism *child, Organism *parent)
      * it moving from) */
     child->prev_pos = child->pos;
     child->prev_q = child->q;
-    world_append(w, child);
+    world_append_raw(w, child);
     if (parent)
         w->counts.births++;
     w->population++;
