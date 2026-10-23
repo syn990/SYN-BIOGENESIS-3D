@@ -28,6 +28,7 @@
 #include <strings.h>
 #include <sys/stat.h>
 
+#include "compat.h"
 #include "ui/gl2d.h"
 #include "ui/input.h"
 #include "ui/theme.h"
@@ -90,14 +91,8 @@ static float mid(TTF_Font *f, const char *s, float x, float cy, Rgb c, Align al)
 
 static const char *settings_path(void)
 {
-    static char path[1024];
-    const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
-    if (xdg && xdg[0])
-        snprintf(path, sizeof path, "%s/syn-biogenesis-3d/settings", xdg);
-    else if (home && home[0])
-        snprintf(path, sizeof path, "%s/.config/syn-biogenesis-3d/settings", home);
-    else
-        return NULL;
+    static char path[1100];
+    snprintf(path, sizeof path, "%s/syn-biogenesis-3d/settings", config_home());
     return path;
 }
 

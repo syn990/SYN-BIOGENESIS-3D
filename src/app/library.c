@@ -23,17 +23,14 @@
 #include <sys/stat.h>
 #include <time.h>
 
+#include "compat.h"
 #include "guide/kind.h"
 #include "io/bgg.h"
 #include "sim/world.h"
 
 static void config_dir(char *out, size_t n, const char *app)
 {
-    const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
-    if (xdg && xdg[0])
-        snprintf(out, n, "%s/%s", xdg, app);
-    else
-        snprintf(out, n, "%s/.config/%s", home ? home : ".", app);
+    snprintf(out, n, "%s/%s", config_home(), app);
 }
 
 static bool mkdirs(const char *path)

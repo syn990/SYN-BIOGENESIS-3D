@@ -22,13 +22,18 @@
 #include <strings.h>
 
 #include "app/app_internal.h"
+#include "compat.h"
 #include "sim/params.h"
 #include "ui/input.h"
 #include "ui/shell.h"
 
 #ifdef _WIN32
-#define popen _popen
-#define pclose _pclose
+#include <fcntl.h>
+#include <io.h>
+#include <windows.h>
+#define EXE ".exe"
+#else
+#define EXE ""
 #endif
 
 #define WORKERS_MAX 16
@@ -52,6 +57,9 @@ struct Arena {
     bool stop;
     Uint32 started;
     SDL_mutex *lock;
+#ifdef _WIN32
+    SDL_mutex *spawn; /* one round started at a time (see run) */
+#endif
     SDL_Thread *worker[WORKERS_MAX];
     int nworkers;
     char exe[1100];
@@ -68,8 +76,11 @@ Arena *arena_new(void)
     ar->units_i = 1;
     ar->copies = 10;
     ar->lock = SDL_CreateMutex();
+#ifdef _WIN32
+    ar->spawn = SDL_CreateMutex();
+#endif
     char *base = SDL_GetBasePath();
-    snprintf(ar->exe, sizeof ar->exe, "%ssyn-biogenesis-3d", base ? base : "./");
+    snprintf(ar->exe, sizeof ar->exe, "%ssyn-biogenesis-3d" EXE, base ? base : "./");
     SDL_free(base);
     return ar;
 }
@@ -110,6 +121,82 @@ void arena_shape_params(ArenaShape s)
     P.initial_organisms = 0;
 }
 
+#ifdef _WIN32
+/* a path in double quotes, as the C library and CommandLineToArgvW read a
+ * command line back: a quote, and the backslashes before one or before
+ * the closing quote, escaped */
+static void quote(const char *s, char *out, size_t n)
+{
+    size_t k = 0;
+    if (k + 1 < n)
+        out[k++] = '"';
+    while (*s && k + 4 < n) {
+        size_t bs = 0;
+        while (s[bs] == '\\')
+            bs++;
+        bool before_quote = s[bs] == '"' || !s[bs];
+        size_t want = before_quote ? 2 * bs : bs;
+        if (k + want + 4 >= n)
+            break;
+        memset(out + k, '\\', want);
+        k += want;
+        s += bs;
+        if (*s == '"') {
+            out[k++] = '\\';
+            out[k++] = '"';
+            s++;
+        } else if (*s) {
+            out[k++] = *s++;
+        }
+    }
+    if (k + 1 < n)
+        out[k++] = '"';
+    out[k] = 0;
+}
+
+/* The round, started hidden, its output read through a pipe. _popen would
+ * go by way of cmd.exe, which from a window program puts a console up for
+ * each round. One round is started at a time, under ar->spawn, so no other
+ * child inherits this one's end of the pipe and keeps it open. */
+static FILE *run(Arena *ar, char *cmd, HANDLE *proc)
+{
+    SECURITY_ATTRIBUTES sa = {sizeof sa, NULL, TRUE};
+    HANDLE rd, wr;
+    FILE *f = NULL;
+    SDL_LockMutex(ar->spawn);
+    if (!CreatePipe(&rd, &wr, &sa, 0)) {
+        SDL_UnlockMutex(ar->spawn);
+        return NULL;
+    }
+    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+    HANDLE nul = CreateFileA("NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                             &sa, OPEN_EXISTING, 0, NULL);
+    STARTUPINFOA si = {.cb = sizeof si, .dwFlags = STARTF_USESTDHANDLES, .hStdInput = nul,
+                       .hStdOutput = wr, .hStdError = nul};
+    PROCESS_INFORMATION pi;
+    BOOL ok = CreateProcessA(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    CloseHandle(wr);
+    if (nul != INVALID_HANDLE_VALUE)
+        CloseHandle(nul);
+    SDL_UnlockMutex(ar->spawn);
+    if (ok) {
+        CloseHandle(pi.hThread);
+        *proc = pi.hProcess;
+        int fd = _open_osfhandle((intptr_t)rd, _O_RDONLY | _O_TEXT);
+        if (fd < 0)
+            CloseHandle(rd);
+        else if (!(f = _fdopen(fd, "r")))
+            _close(fd);
+        if (!f) {
+            WaitForSingleObject(pi.hProcess, INFINITE);
+            CloseHandle(pi.hProcess);
+        }
+    } else {
+        CloseHandle(rd);
+    }
+    return f;
+}
+#else
 /* a path for sh, in single quotes */
 static void quote(const char *s, char *out, size_t n)
 {
@@ -128,6 +215,7 @@ static void quote(const char *s, char *out, size_t n)
         out[k++] = '\'';
     out[k] = 0;
 }
+#endif
 
 /* The round's last CSV row: the columns called marked and line2, and
  * population. */
@@ -181,18 +269,32 @@ static int worker(void *ud)
             quote(ar->path[1], b, sizeof b);
             snprintf(cmd, sizeof cmd,
                      "%s --headless --seed %d --frames %d --size %d %d %d --pitch %d "
-                     "--organisms 0 --copies %d --import %s --import %s 2>/dev/null",
-                     exe, ar->round[i].seed, ar->fought_units * 256, wd, ht, dp, pitch,
+                     "--organisms 0 --copies %d --import %s --import %s"
+#ifndef _WIN32
+                     " 2>/dev/null"
+#endif
+                     , exe, ar->round[i].seed, ar->fought_units * 256, wd, ht, dp, pitch,
                      ar->fought_copies, a, b);
         }
         SDL_UnlockMutex(ar->lock);
         if (i < 0)
             break;
         ArenaRound r = {0};
+#ifdef _WIN32
+        HANDLE proc;
+        FILE *f = run(ar, cmd, &proc);
+        bool ok = f && parse_result(f, &r);
+        if (f) {
+            fclose(f);
+            WaitForSingleObject(proc, INFINITE);
+            CloseHandle(proc);
+        }
+#else
         FILE *f = popen(cmd, "r");
         bool ok = f && parse_result(f, &r);
         if (f)
             pclose(f);
+#endif
         SDL_LockMutex(ar->lock);
         ar->round[i].line[0] = r.line[0];
         ar->round[i].line[1] = r.line[1];

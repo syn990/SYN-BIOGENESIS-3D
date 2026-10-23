@@ -48,6 +48,7 @@
 #include <time.h>
 
 #include "app/app_internal.h"
+#include "compat.h"
 #include "io/worldfile.h"
 #include "render/lighting.h"
 #include "sim/params.h"
@@ -96,11 +97,7 @@ bool app_make_world(App *a)
 
 static void worlds_dir(char *out, size_t n)
 {
-    const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
-    if (xdg && xdg[0])
-        snprintf(out, n, "%s/syn-biogenesis-3d/worlds", xdg);
-    else
-        snprintf(out, n, "%s/.config/syn-biogenesis-3d/worlds", home ? home : ".");
+    snprintf(out, n, "%s/syn-biogenesis-3d/worlds", config_home());
 }
 
 bool app_save_world(App *a, const char *name, char *path, size_t pathlen, char *err, int errlen)
@@ -133,9 +130,8 @@ bool app_save_world(App *a, const char *name, char *path, size_t pathlen, char *
 bool app_load_world(App *a, const char *name, char *err, int errlen)
 {
     char path[1200];
-    if (strchr(name, '/')) {
-        snprintf(path, sizeof path, "%s", name);
-    } else {
+    snprintf(path, sizeof path, "%s", name);
+    if (!strchr(path_slashes(path), '/')) {
         char dir[1024];
         worlds_dir(dir, sizeof dir);
         size_t n = strlen(name);

@@ -4,6 +4,7 @@
 #   make                 the program (SDL2, SDL2_ttf, libepoxy; cglm is in third_party)
 #   make NO_WINDOW=1     the same program without a window (no SDL2 or GL)
 #   make test            the simulation's checks and the determinism check
+#   make dist            the program and its assets in dist/syn-biogenesis-3d/
 #
 # The simulation is plain C11 and must compute the same world from the same
 # seed on every machine: no -ffast-math, and floating-point contraction off
@@ -14,6 +15,23 @@ CFLAGS ?= -O2 -g
 override CFLAGS += -std=c11 -D_DEFAULT_SOURCE -Wall -Wextra -ffp-contract=off -Isrc
 LDLIBS = -lm
 PKG_CONFIG ?= pkg-config
+
+# Windows, with MinGW-w64 (MSYS2's UCRT64): the same program,
+# syn-biogenesis-3d.exe, a window program with a manifest (src/win/), as
+# SYN-BIOGENESIS builds there. Linked statically: SDL and every library it
+# uses are in the program, which needs no DLL but Windows's own, wherever
+# it is run from.
+ifneq ($(findstring mingw,$(shell $(CC) -dumpmachine)),)
+EXE = .exe
+# M_PI, which -std=c11 leaves out there
+override CFLAGS += -D_USE_MATH_DEFINES
+PKG_STATIC = --static
+# harfbuzz, under SDL2_ttf, is C++, which its pkg-config file leaves out
+CXX_RUNTIME = -lstdc++
+LDLIBS += -static
+WINDRES ?= windres
+WIN_RES = obj/win/syn-biogenesis-3d.res.o
+endif
 
 SIM = src/sim/dmath.c src/sim/jrandom.c src/sim/params.c src/sim/genetic_code.c \
       src/sim/organism.c src/sim/world.c src/io/bgg.c src/io/worldfile.c
@@ -36,14 +54,14 @@ PROGRAM_OBJ = $(OBJ_SIM) $(OBJ_CORE) obj/main-nowindow.o
 PROGRAM_LIBS = $(LDLIBS)
 else
 GL_CFLAGS = $(shell $(PKG_CONFIG) --cflags sdl2 SDL2_ttf epoxy) -Ithird_party/cglm/include
-GL_LIBS = $(shell $(PKG_CONFIG) --libs sdl2 SDL2_ttf epoxy)
-PROGRAM_OBJ = $(OBJ_SIM) $(OBJ_CORE) $(OBJ_WIN) obj/main.o
+GL_LIBS = $(shell $(PKG_CONFIG) $(PKG_STATIC) --libs sdl2 SDL2_ttf epoxy) $(CXX_RUNTIME)
+PROGRAM_OBJ = $(OBJ_SIM) $(OBJ_CORE) $(OBJ_WIN) obj/main.o $(WIN_RES)
 PROGRAM_LIBS = $(GL_LIBS) $(LDLIBS)
 endif
 
-all: syn-biogenesis-3d
+all: syn-biogenesis-3d$(EXE)
 
-syn-biogenesis-3d: $(PROGRAM_OBJ)
+syn-biogenesis-3d$(EXE): $(PROGRAM_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(PROGRAM_LIBS)
 
 obj/main-nowindow.o: src/main.c $(HEADERS)
@@ -56,6 +74,12 @@ obj/%.o: src/%.c $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GL_ONLY) -c -o $@ $<
 
+# Windows: the manifest that runs the program in the UTF-8 code page (so
+# the C library's file names are UTF-8, as SDL's text is)
+obj/win/syn-biogenesis-3d.res.o: src/win/syn-biogenesis-3d.rc src/win/syn-biogenesis-3d.manifest
+	@mkdir -p $(dir $@)
+	$(WINDRES) -I src/win -O coff -o $@ $<
+
 # The headless program unoptimised: a seed must give the same world either way.
 OBJ_O0 = $(SIM:src/%.c=obj/O0/%.o) $(CORE:src/%.c=obj/O0/%.o) obj/O0/main.o
 
@@ -63,27 +87,36 @@ obj/O0/%.o: src/%.c $(HEADERS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -O0 -DSYN3D_NO_WINDOW -c -o $@ $<
 
-tests/syn-biogenesis-3d-O0: $(OBJ_O0)
+tests/syn-biogenesis-3d-O0$(EXE): $(OBJ_O0)
 	$(CC) $(CFLAGS) -O0 -o $@ $^ $(LDLIBS)
 
-tests/check: tests/check.c $(OBJ_SIM)
+tests/check$(EXE): tests/check.c $(OBJ_SIM)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
-test: syn-biogenesis-3d tests/check tests/syn-biogenesis-3d-O0
+test: syn-biogenesis-3d$(EXE) tests/check$(EXE) tests/syn-biogenesis-3d-O0$(EXE)
 	./tests/check
 	./tests/determinism.sh
 
 # Stopgaps from before the window existed, drawn on the CPU: a camera that
 # films the headless world (tools/film.sh makes the video) and a window.
-tools/film: tools/film.c tools/raster.c $(OBJ_SIM)
+tools/film$(EXE): tools/film.c tools/raster.c $(OBJ_SIM)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
-tools/view: tools/view.c tools/raster.c $(OBJ_SIM)
+tools/view$(EXE): tools/view.c tools/raster.c $(OBJ_SIM)
 	$(CC) $(CFLAGS) $(shell $(PKG_CONFIG) --cflags sdl2) -o $@ $^ \
-		$(shell $(PKG_CONFIG) --libs sdl2) $(LDLIBS)
+		$(shell $(PKG_CONFIG) $(PKG_STATIC) --libs sdl2) $(LDLIBS)
+
+# The program without its debugging information, with its assets, in
+# dist/syn-biogenesis-3d/: on Windows a folder that runs anywhere
+STRIP ?= strip
+dist: syn-biogenesis-3d$(EXE)
+	rm -rf dist/syn-biogenesis-3d
+	mkdir -p dist/syn-biogenesis-3d
+	cp -r assets LICENSE dist/syn-biogenesis-3d/
+	$(STRIP) -o dist/syn-biogenesis-3d/syn-biogenesis-3d$(EXE) syn-biogenesis-3d$(EXE)
 
 clean:
-	rm -rf obj syn-biogenesis-3d tools/film tools/view tests/check tests/syn-biogenesis-3d-O0 \
-		tests/syn-biogenesis-3d-clang
+	rm -rf obj dist syn-biogenesis-3d$(EXE) tools/film$(EXE) tools/view$(EXE) tests/check$(EXE) \
+		tests/syn-biogenesis-3d-O0$(EXE) tests/syn-biogenesis-3d-clang$(EXE)
 
-.PHONY: all test clean
+.PHONY: all test dist clean

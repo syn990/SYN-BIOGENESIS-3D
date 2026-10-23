@@ -136,6 +136,34 @@ report:
 `make tools/view` builds the CPU window that came before the renderer, for
 machines without OpenGL 3.3.
 
+### Windows
+
+The same program builds on Windows 10 and 11 with
+[MSYS2](https://www.msys2.org), as SYN-BIOGENESIS does. In its UCRT64 shell:
+
+```sh
+pacman -S --needed make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf \
+    mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-SDL2_ttf mingw-w64-ucrt-x86_64-libepoxy
+make
+make dist
+make test
+```
+
+`make` builds `syn-biogenesis-3d.exe`, linked statically: SDL and the
+libraries it uses are inside it, so it needs no DLL but Windows's own and
+runs from Explorer or any shell, with the `assets` folder beside it.
+`make dist` puts it, without its debugging information, in
+`dist/syn-biogenesis-3d/` with the assets; that folder runs on any 64-bit
+Windows 10 or 11 without MSYS2.
+
+It is a window program. Run from Command Prompt or PowerShell, `--help`
+and `--headless` write to that console, which does not wait for it; piped
+(`| Out-Host`, `| more`), it waits. Saved worlds, kept beings and settings
+are in `%APPDATA%\syn-biogenesis-3d`, and the library reads
+SYN-BIOGENESIS's beings from `%APPDATA%\syn-biogenesis`, where it keeps
+them on Windows. The arena's rounds run as hidden child processes, without
+a console each.
+
 ## Credits
 
 The rules are Biogenesis's:

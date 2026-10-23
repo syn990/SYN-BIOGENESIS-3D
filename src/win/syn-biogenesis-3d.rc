@@ -1,0 +1,7 @@
+/* SYN-BIOGENESIS-3D: Biogenesis in three dimensions.
+ * Copyright (C) 2026 syn990
+ * SPDX-License-Identifier: GPL-2.0-or-later (see LICENSE)
+ *
+ * The Windows program's resources: its manifest. */
+
+1 24 "syn-biogenesis-3d.manifest"

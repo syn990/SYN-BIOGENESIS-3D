@@ -1,0 +1,6 @@
+# Text is checked out as committed, with \n, on every system: the Makefile
+# and shell scripts run under MSYS2 on Windows too, where Git would
+# otherwise check text out with \r\n.
+* text=auto eol=lf
+# kept byte for byte: the font licence as it came
+assets/fonts/OFL-SYNTerminal.txt -text

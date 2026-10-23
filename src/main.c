@@ -23,8 +23,32 @@
 #include "app/app.h"
 #endif
 
+#if defined(_WIN32) && !defined(SYN3D_NO_WINDOW)
+#include <stdbool.h>
+#include <stdio.h>
+#include <windows.h>
+
+/* On Windows this is a window program, which starts without a console: run
+ * from one (--help, --headless) with its output not redirected, it writes
+ * to that console (SYN-BIOGENESIS's launcher does the same). */
+static void attach_console(void)
+{
+    bool out = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE)) == FILE_TYPE_UNKNOWN;
+    bool err = GetFileType(GetStdHandle(STD_ERROR_HANDLE)) == FILE_TYPE_UNKNOWN;
+    if ((out || err) && AttachConsole(ATTACH_PARENT_PROCESS)) {
+        if (out)
+            freopen("CONOUT$", "w", stdout);
+        if (err)
+            freopen("CONOUT$", "w", stderr);
+    }
+}
+#endif
+
 int main(int argc, char **argv)
 {
+#if defined(_WIN32) && !defined(SYN3D_NO_WINDOW)
+    attach_console();
+#endif
     for (int i = 1; i < argc; i++)
         if (strcmp(argv[i], "--headless") == 0) {
             memmove(&argv[i], &argv[i + 1], (size_t)(argc - i) * sizeof *argv);

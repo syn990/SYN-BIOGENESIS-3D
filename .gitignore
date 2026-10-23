@@ -8,3 +8,5 @@ __pycache__/
 /runs-*/
 /tools/film
 /tools/view
+/dist/
+*.exe
