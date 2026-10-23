@@ -18,14 +18,17 @@
  * and the picture is drawn at the display's rate: each organism is drawn
  * between where it began its last frame and where it ended it, so motion is
  * smooth at any speed. The camera orbits an aim point that follows the
- * selected organism, the life, or the box's centre. Only this file and
- * src/render touch the window and GL; the World is only read.
+ * selected organism, the life, or the box's centre. The SYN-OS interface
+ * (interface.c) is drawn over the scene; a press on it never reaches the
+ * camera. The World is only read here, except by the actions (app_do).
  *
  *   drag            turn the camera          right-drag   move the aim
  *   wheel           closer / further         click        select an organism
+ *   right-click     a menu                   `            the console
  *   space           pause                    .            one frame (paused)
  *   up / down       faster / slower          f            follow / stop following
  *   n / r           next seed / restart      home         camera back to the box
+ *   t / shift+t     next / previous theme    h            hide / show the key hints
  *   esc             drop the selection, then quit
  */
 
@@ -38,45 +41,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "options.h"
-#include "platform/window.h"
-#include "render/capsules.h"
+#include "app/app_internal.h"
 #include "render/lighting.h"
-#include "render/lines.h"
 #include "sim/params.h"
-#include "sim/world.h"
+#include "ui/gl2d.h"
+#include "ui/input.h"
+#include "ui/shell.h"
+#include "ui/skin.h"
 
 #define FOV_DEG 45.0
 
-/* world frames per second; the last is "as many as fit" */
-static const int k_speeds[] = {5, 15, 30, 60, 120, 240, 480, 960, 0};
-#define N_SPEEDS ((int)(sizeof k_speeds / sizeof k_speeds[0]))
-
-typedef enum { FOLLOW_NONE, FOLLOW_LIFE, FOLLOW_SELECTED } Follow;
-
-typedef struct {
-    PlatformWindow win;
-    World w;
-    WorldOptions wo;
-    int warm;
-    /* time */
-    int speed;
-    bool paused;
-    double acc; /* world frames owed */
-    /* camera */
-    double yaw, pitch, distance;
-    V3 aim;
-    Follow follow;
-    int selected; /* organism id, -1 for none */
-    /* drawing scratch */
-    CapsuleInstance *inst;
-    int *inst_org; /* which organism each instance is */
-    int ninst, inst_cap;
-    LineVertex *lines;
-    int nlines, lines_cap;
-    SceneView view;
-    V3 cam_eye, cam_fwd, cam_right, cam_up;
-} App;
+const int k_speeds[] = {5, 15, 30, 60, 120, 240, 480, 960, 0};
+const int k_nspeeds = (int)(sizeof k_speeds / sizeof k_speeds[0]);
 
 static V3 box_centre(const World *w)
 {
@@ -94,7 +70,7 @@ static void camera_home(App *a)
     a->aim = slab ? world_life_centre_or_box(&a->w) : box_centre(&a->w);
 }
 
-static bool make_world(App *a)
+bool app_make_world(App *a)
 {
     char err[512];
     if (world_options_genesis(&a->wo, &a->w, err, sizeof err) < 0) {
@@ -108,12 +84,22 @@ static bool make_world(App *a)
     return true;
 }
 
-static Organism *find_org(const World *w, int id)
+Organism *app_find(const World *w, int id)
 {
     for (int i = 0; i < w->norgs; i++)
         if (w->orgs[i]->id == id)
             return w->orgs[i];
     return NULL;
+}
+
+const char *app_speed_text(const App *a)
+{
+    static char s[16];
+    if (k_speeds[a->speed])
+        snprintf(s, sizeof s, "%d/s", k_speeds[a->speed]);
+    else
+        snprintf(s, sizeof s, "max");
+    return s;
 }
 
 /* ---- drawing ---- */
@@ -127,15 +113,13 @@ static Quat quat_nlerp(Quat a, Quat b, double t)
     return quat_normalize(q);
 }
 
-/* Where an organism is drawn: between the pose it began the world's last
- * frame in and the pose it ended it in. */
-static void org_draw_pose(const Organism *o, double alpha, V3 *pos, Quat *q)
+void app_draw_pose(const Organism *o, double alpha, V3 *pos, Quat *q)
 {
     *pos = v3_add(o->prev_pos, v3_scale(v3_sub(o->pos, o->prev_pos), alpha));
     *q = quat_nlerp(o->prev_q, o->q, alpha);
 }
 
-static void build_instances(App *a, double alpha, double t_seconds)
+static void build_instances(App *a)
 {
     const World *w = &a->w;
     a->ninst = 0;
@@ -143,7 +127,7 @@ static void build_instances(App *a, double alpha, double t_seconds)
         const Organism *o = w->orgs[i];
         V3 pos;
         Quat q;
-        org_draw_pose(o, alpha, &pos, &q);
+        app_draw_pose(o, a->alpha, &pos, &q);
         M3 R = m3_from_quat(q);
         bool selected = o->id == a->selected;
         float flash = o->frames_color > 0 && o->flash_color != FLASH_NONE
@@ -177,7 +161,7 @@ static void build_instances(App *a, double alpha, double t_seconds)
             ci->radius = (float)P.segment_radius;
             ci->glow = flash * 0.9f;
             if (selected)
-                ci->glow += 0.25f + 0.15f * (float)sin(t_seconds * 5.0);
+                ci->glow += 0.25f + 0.15f * (float)sin(a->seconds * 5.0);
             a->ninst++;
         }
     }
@@ -202,12 +186,25 @@ static void line(App *a, V3 p, V3 q, const float rgba[4])
     a->nlines += 2;
 }
 
-static void build_lines(App *a, double alpha)
+static void rgba_of(Rgb c, float alpha, float out[4])
+{
+    out[0] = c.r / 255.0f;
+    out[1] = c.g / 255.0f;
+    out[2] = c.b / 255.0f;
+    out[3] = alpha;
+}
+
+/* The box and the floor in the theme's colours: its border for the grid,
+ * its accent for the box's edges and the selection's marks. */
+static void build_lines(App *a)
 {
     const World *w = &a->w;
+    const Theme *t = skin_theme();
     a->nlines = 0;
-    static const float grid[4] = {0.30f, 0.42f, 0.58f, 0.22f};
-    static const float edge[4] = {0.55f, 0.68f, 0.85f, 0.55f};
+    float grid[4], edge[4], mark[4];
+    rgba_of(t->border, 0.30f, grid);
+    rgba_of(t->accent, 0.65f, edge);
+    rgba_of(t->accent, 0.9f, mark);
     double step = 100;
     while ((w->width / step) > 40 || (w->height / step) > 40)
         step *= 2;
@@ -222,17 +219,15 @@ static void build_lines(App *a, double alpha)
                                  {4, 6}, {5, 7}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
     for (int k = 0; k < 12; k++)
         line(a, c[e[k][0]], c[e[k][1]], edge);
-    /* the selected organism: a drop line to the floor and a ring of ticks */
-    Organism *s = a->selected >= 0 ? find_org(w, a->selected) : NULL;
+    Organism *s = a->selected >= 0 ? app_find(w, a->selected) : NULL;
     if (s) {
-        static const float mark[4] = {1.0f, 0.85f, 0.35f, 0.75f};
         V3 pos;
         Quat q;
-        org_draw_pose(s, alpha, &pos, &q);
+        app_draw_pose(s, a->alpha, &pos, &q);
         line(a, pos, v3(pos.x, pos.y, 0), mark);
         double r = s->radius + 4;
         for (int k = 0; k < 4; k++) {
-            double th = k * D_PI / 2;
+            double th = k * D_PI / 2 + a->seconds * 0.8;
             V3 d = v3(cos(th), sin(th), 0);
             line(a, v3_add(pos, v3_scale(d, r)), v3_add(pos, v3_scale(d, r + 6)), mark);
         }
@@ -255,49 +250,52 @@ static void set_view(App *a)
     vec3 e = {(float)eye.x, (float)eye.y, (float)eye.z};
     vec3 c = {(float)a->aim.x, (float)a->aim.y, (float)a->aim.z};
     vec3 up = {0, 0, 1};
-    glm_perspective(glm_rad((float)FOV_DEG), (float)pw->width / (float)(pw->height > 0 ? pw->height : 1),
-                    near, far, proj);
+    glm_perspective(glm_rad((float)FOV_DEG),
+                    (float)pw->width / (float)(pw->height > 0 ? pw->height : 1), near, far, proj);
     glm_lookat(e, c, up, view);
     mat4 vp;
     glm_mat4_mul(proj, view, vp);
     memcpy(a->view.view_proj, vp, sizeof a->view.view_proj);
-    a->view.eye[0] = e[0];
-    a->view.eye[1] = e[1];
-    a->view.eye[2] = e[2];
+    memcpy(a->view.eye, e, sizeof a->view.eye);
     V3 l = v3_unit_or(v3(0.35, 0.25, 1.0), v3(0, 0, 1));
     a->view.light_dir[0] = (float)l.x;
     a->view.light_dir[1] = (float)l.y;
     a->view.light_dir[2] = (float)l.z;
-    a->view.fog_rgb[0] = 0.02f;
-    a->view.fog_rgb[1] = 0.026f;
-    a->view.fog_rgb[2] = 0.038f;
+    /* the water is the theme's background */
+    const Theme *t = skin_theme();
+    a->view.fog_rgb[0] = t->bg.r / 255.0f;
+    a->view.fog_rgb[1] = t->bg.g / 255.0f;
+    a->view.fog_rgb[2] = t->bg.b / 255.0f;
+    /* two steps of the depth buffer's precision at the aim (near is a
+     * hundredth of the distance, 24 bits of depth) */
+    a->view.depth_step = (float)(a->distance * 1.2e-5);
     a->view.fog_near = (float)(a->distance * 0.6);
     a->view.fog_far = (float)(a->distance + diag);
 }
 
-static void draw(App *a, double alpha, double t_seconds)
+static void draw(App *a)
 {
     PlatformWindow *pw = &a->win;
     set_view(a);
-    build_instances(a, alpha, t_seconds);
-    build_lines(a, alpha);
+    build_instances(a);
+    build_lines(a);
     lighting_scene_begin(pw->width, pw->height, a->view.fog_rgb[0], a->view.fog_rgb[1],
                          a->view.fog_rgb[2]);
     capsules_draw(a->inst, a->ninst, &a->view);
     lines_draw(a->lines, a->nlines, &a->view);
     lighting_scene_end();
+    if (a->interface)
+        interface_draw(a, pw->width, pw->height);
 }
 
 /* ---- picking ---- */
 
-/* The organism under window point (mx, my): the nearest capsule the ray
+/* The organism under drawable pixel (mx, my): the nearest capsule the ray
  * through it passes within reach of. */
-static int pick(App *a, int mx, int my)
+static int pick(App *a, float mx, float my)
 {
     PlatformWindow *pw = &a->win;
-    int ww, wh;
-    SDL_GetWindowSize(pw->window, &ww, &wh);
-    double nx = (2.0 * mx / ww - 1), ny = (1 - 2.0 * my / wh);
+    double nx = (2.0 * mx / pw->width - 1), ny = (1 - 2.0 * my / pw->height);
     double th = tan(FOV_DEG * D_PI / 360), aspect = (double)pw->width / pw->height;
     V3 dir = v3_unit_or(v3_add(a->cam_fwd, v3_add(v3_scale(a->cam_right, nx * th * aspect),
                                                   v3_scale(a->cam_up, ny * th))),
@@ -313,10 +311,7 @@ static int pick(App *a, int mx, int my)
         V3 d2 = v3_sub(q, p), r = v3_sub(o, p);
         double b = v3_dot(dir, d2), e = v3_dot(d2, d2), f = v3_dot(d2, r), cc = v3_dot(dir, r);
         double denom = e - b * b, t, s;
-        if (e < 1e-12) {
-            s = 0;
-            t = -cc;
-        } else if (denom < 1e-12) {
+        if (e < 1e-12 || denom < 1e-12) {
             s = 0;
             t = -cc;
         } else {
@@ -336,31 +331,82 @@ static int pick(App *a, int mx, int my)
     return best_id;
 }
 
-/* ---- the title bar (until the SYN-OS interface) ---- */
+/* ---- actions ---- */
 
-static void update_title(App *a, double fps)
+static void select_org(App *a, int id)
 {
-    char title[512];
-    const World *w = &a->w;
-    char speed[16];
-    if (k_speeds[a->speed])
-        snprintf(speed, sizeof speed, "%d/s", k_speeds[a->speed]);
-    else
-        snprintf(speed, sizeof speed, "max");
-    int n = snprintf(title, sizeof title,
-                     "SYN-BIOGENESIS-3D  |  seed %lld  |  %d x %d x %d  |  time %lld  |  "
-                     "alive %d  dead %d  |  kills %lld  |  %s%s  |  %.0f fps",
-                     (long long)a->wo.seed, w->width, w->height, w->depth,
-                     (long long)(w->frame / 256), w->population, world_n_corpses(w),
-                     (long long)w->counts.kills, speed, a->paused ? "  PAUSED" : "", fps);
-    Organism *s = a->selected >= 0 ? find_org(w, a->selected) : NULL;
-    if (s && n > 0 && n < (int)sizeof title)
-        snprintf(title + n, sizeof title - (size_t)n,
-                 "  |  #%d %s, generation %d, energy %.1f, age %d/%d, %d children, %d kills%s",
-                 s->id, s->alive ? "alive" : "dead", s->generation, s->energy, s->age >> 8,
-                 s->gc->max_age + 1, s->total_children, s->total_kills,
-                 a->follow == FOLLOW_SELECTED ? ", followed" : "");
-    SDL_SetWindowTitle(a->win.window, title);
+    a->selected = id;
+    Organism *o = id >= 0 ? app_find(&a->w, id) : NULL;
+    a->selected_was_alive = o && o->alive;
+    if (id >= 0)
+        a->follow = FOLLOW_SELECTED;
+    else if (a->follow == FOLLOW_SELECTED)
+        a->follow = FOLLOW_NONE;
+}
+
+void app_do(App *a, int action)
+{
+    switch (action) {
+    case ACT_PAUSE:
+        a->paused = !a->paused;
+        break;
+    case ACT_STEP:
+        if (!a->paused)
+            a->paused = true;
+        world_time(&a->w);
+        a->alpha = 1;
+        break;
+    case ACT_FASTER:
+        a->speed = a->speed + 1 < k_nspeeds ? a->speed + 1 : a->speed;
+        break;
+    case ACT_SLOWER:
+        a->speed = a->speed > 0 ? a->speed - 1 : 0;
+        break;
+    case ACT_NEXT_SEED:
+        a->wo.seed++;
+        /* fall through */
+    case ACT_RESTART:
+        if (app_make_world(a))
+            interface_note(a, false, "Seed %lld: %d founders in %d x %d x %d",
+                           (long long)a->wo.seed, a->w.population, a->w.width, a->w.height,
+                           a->w.depth);
+        break;
+    case ACT_HOME:
+        camera_home(a);
+        break;
+    case ACT_FOLLOW:
+        if (a->follow != FOLLOW_NONE)
+            a->follow = FOLLOW_NONE;
+        else
+            a->follow = a->selected >= 0 ? FOLLOW_SELECTED : FOLLOW_LIFE;
+        break;
+    case ACT_DESELECT:
+        select_org(a, -1);
+        break;
+    case ACT_KILL: {
+        Organism *o = a->selected >= 0 ? app_find(&a->w, a->selected) : NULL;
+        if (o && o->alive) {
+            org_die(o, NULL);
+            a->selected_was_alive = false;
+            interface_note(a, false, "#%d killed", o->id);
+        }
+        break;
+    }
+    case ACT_THEME_NEXT:
+    case ACT_THEME_PREV:
+        shell_theme_step(action == ACT_THEME_NEXT ? 1 : -1);
+        interface_note(a, false, "Theme %s", shell_theme_name());
+        break;
+    case ACT_CONSOLE:
+        shell_console_toggle();
+        break;
+    case ACT_HINTS:
+        a->hints = !a->hints;
+        break;
+    case ACT_QUIT:
+        a->running = false;
+        break;
+    }
 }
 
 /* ---- the loop ---- */
@@ -373,40 +419,115 @@ static void usage(FILE *f)
           "  --shot FILE.ppm   draw one picture of the world, save it and quit\n"
           "  --camera Y P D    start the camera at yaw Y, pitch P degrees, distance D,\n"
           "                    aimed at the life\n"
+          "  --select ID       start with organism ID selected (-1: the biggest living)\n"
           "  --seconds S       quit after S seconds and print the frame rate\n"
           "  --window W H      window size (default 1440 900)\n"
           "\n"
-          "  drag: turn   right-drag: move   wheel: zoom   click: select\n"
-          "  space: pause   .: one frame   up/down: speed   f: follow\n"
-          "  n: next seed   r: restart   home: whole box   esc: drop selection, quit\n",
+          "  drag: turn   right-drag: move   wheel: zoom   click: select   right-click: menu\n"
+          "  space: pause   .: one frame   up/down: speed   f: follow   `: console\n"
+          "  n: next seed   r: restart   home: whole box   t: theme   h: key hints\n"
+          "  esc: drop the selection, then quit\n",
           f);
+}
+
+/* fonts/ and themes/: beside the program, or where it is run from */
+static const char *find_assets(void)
+{
+    static char path[1024];
+    char *base = SDL_GetBasePath();
+    const char *tries[3] = {base, "./", NULL};
+    for (int i = 0; i < 2; i++) {
+        if (!tries[i])
+            continue;
+        snprintf(path, sizeof path, "%sassets/fonts/NotoSans-Regular.ttf", tries[i]);
+        FILE *f = fopen(path, "rb");
+        if (f) {
+            fclose(f);
+            snprintf(path, sizeof path, "%sassets", tries[i]);
+            SDL_free(base);
+            return path;
+        }
+    }
+    SDL_free(base);
+    return NULL;
+}
+
+static void handle_key(App *a, SDL_Keycode k, SDL_Keymod mods)
+{
+    switch (k) {
+    case SDLK_q:
+        app_do(a, ACT_QUIT);
+        break;
+    case SDLK_ESCAPE:
+        app_do(a, a->selected >= 0 ? ACT_DESELECT : ACT_QUIT);
+        break;
+    case SDLK_SPACE:
+        app_do(a, ACT_PAUSE);
+        break;
+    case SDLK_PERIOD:
+        app_do(a, ACT_STEP);
+        break;
+    case SDLK_UP:
+        app_do(a, ACT_FASTER);
+        break;
+    case SDLK_DOWN:
+        app_do(a, ACT_SLOWER);
+        break;
+    case SDLK_f:
+        app_do(a, ACT_FOLLOW);
+        break;
+    case SDLK_n:
+        app_do(a, ACT_NEXT_SEED);
+        break;
+    case SDLK_r:
+        app_do(a, ACT_RESTART);
+        break;
+    case SDLK_HOME:
+        app_do(a, ACT_HOME);
+        break;
+    case SDLK_t:
+        app_do(a, mods & KMOD_SHIFT ? ACT_THEME_PREV : ACT_THEME_NEXT);
+        break;
+    case SDLK_h:
+        app_do(a, ACT_HINTS);
+        break;
+    case SDLK_BACKQUOTE:
+        if (a->interface)
+            app_do(a, ACT_CONSOLE);
+        break;
+    case SDLK_k:
+        app_do(a, ACT_KILL);
+        break;
+    }
 }
 
 int app_main(int argc, char **argv)
 {
-    App a;
-    memset(&a, 0, sizeof a);
-    world_options_init(&a.wo);
+    static App app;
+    App *a = &app;
+    memset(a, 0, sizeof *a);
+    world_options_init(&a->wo);
     const char *shot = NULL;
-    int win_w = 1440, win_h = 900;
+    int win_w = 1440, win_h = 900, select_at_start = -2;
     double cam[3] = {0, 0, 0}; /* yaw, pitch, distance from --camera; 0 distance keeps home */
     double run_for = 0;        /* --seconds: quit after this long and report the frame rate */
     for (int i = 1; i < argc; i++) {
-        if (world_option(&a.wo, argc, argv, &i))
+        if (world_option(&a->wo, argc, argv, &i))
             continue;
         const char *s = argv[i];
         if (strcmp(s, "--warm") == 0 && i + 1 < argc)
-            a.warm = atoi(argv[++i]);
+            a->warm = atoi(argv[++i]);
         else if (strcmp(s, "--shot") == 0 && i + 1 < argc)
             shot = argv[++i];
         else if (strcmp(s, "--seconds") == 0 && i + 1 < argc)
             run_for = atof(argv[++i]);
+        else if (strcmp(s, "--select") == 0 && i + 1 < argc)
+            select_at_start = atoi(argv[++i]);
         else if (strcmp(s, "--camera") == 0 && i + 3 < argc) {
             cam[0] = atof(argv[++i]);
             cam[1] = atof(argv[++i]);
             cam[2] = atof(argv[++i]);
-        }
-        else if (strcmp(s, "--window") == 0 && i + 2 < argc) {
+        } else if (strcmp(s, "--window") == 0 && i + 2 < argc) {
             win_w = atoi(argv[++i]);
             win_h = atoi(argv[++i]);
         } else if (strcmp(s, "--help") == 0 || strcmp(s, "-h") == 0) {
@@ -423,122 +544,109 @@ int app_main(int argc, char **argv)
         fprintf(stderr, "syn-biogenesis-3d: %s\n", err);
         return 2;
     }
-    if (!make_world(&a))
+    if (!app_make_world(a))
         return 1;
-    if (!platform_window_create(&a.win, "SYN-BIOGENESIS-3D", win_w, win_h))
+    if (!platform_window_create(&a->win, "SYN-BIOGENESIS-3D", win_w, win_h))
         return 1;
     lighting_init();
     capsules_init();
     lines_init();
-    camera_home(&a);
+    gl2d_init();
+    const char *assets = find_assets();
+    a->interface = assets && interface_init(a, assets);
+    if (!a->interface)
+        fprintf(stderr, "syn-biogenesis-3d: no assets (fonts, themes): no SYN-OS interface\n");
+    a->hints = true;
+    camera_home(a);
     if (cam[2] > 0) {
-        a.yaw = cam[0];
-        a.pitch = cam[1];
-        a.distance = cam[2];
-        a.follow = FOLLOW_LIFE;
-        a.aim = world_life_centre_or_box(&a.w);
+        a->yaw = cam[0];
+        a->pitch = cam[1];
+        a->distance = cam[2];
+        a->follow = FOLLOW_LIFE;
+        a->aim = world_life_centre_or_box(&a->w);
     }
-    a.speed = 3; /* 60 world frames a second */
+    if (select_at_start == -1) {
+        /* the biggest living organism (for pictures) */
+        double most = 0;
+        for (int i = 0; i < a->w.norgs; i++)
+            if (a->w.orgs[i]->alive && a->w.orgs[i]->mass > most) {
+                most = a->w.orgs[i]->mass;
+                select_at_start = a->w.orgs[i]->id;
+            }
+    }
+    if (select_at_start >= 0 && app_find(&a->w, select_at_start)) {
+        select_org(a, select_at_start);
+        a->aim = app_find(&a->w, select_at_start)->pos;
+    }
+    a->speed = 3; /* 60 world frames a second */
+    a->alpha = 1;
+    a->running = true;
+    interface_note(a, false, "Seed %lld: %d organisms in %d x %d x %d", (long long)a->wo.seed,
+                   a->w.population, a->w.width, a->w.height, a->w.depth);
 
     if (shot) {
-        draw(&a, 1.0, 0);
-        bool ok = platform_window_shot(&a.win, shot);
+        platform_window_refresh_size(&a->win);
+        draw(a);
+        bool ok = platform_window_shot(&a->win, shot);
         fprintf(stderr, ok ? "%s\n" : "could not write %s\n", shot);
         return ok ? 0 : 1;
     }
 
-    bool running = true, dragging = false, panning = false, moved = false;
+    bool dragging = false, panning = false, moved = false;
     Uint64 freq = SDL_GetPerformanceFrequency(), last = SDL_GetPerformanceCounter();
     Uint64 start = last;
-    Uint32 last_title = 0;
+    Uint32 last_fps = SDL_GetTicks();
     int frames_since = 0;
     long frames_total = 0;
-    while (running) {
+    while (a->running) {
+        int ww, wh;
+        SDL_GetWindowSize(a->win.window, &ww, &wh);
+        float scale = ww > 0 ? (float)a->win.width / (float)ww : 1;
+        uiin_begin_frame(scale);
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT) {
+                a->running = false;
+                continue;
+            }
+            if (uiin_event(&e))
+                continue; /* the interface's */
             switch (e.type) {
-            case SDL_QUIT:
-                running = false;
-                break;
             case SDL_MOUSEBUTTONDOWN:
                 dragging = e.button.button == SDL_BUTTON_LEFT;
                 panning = e.button.button == SDL_BUTTON_RIGHT;
                 moved = false;
                 break;
             case SDL_MOUSEBUTTONUP:
-                if (e.button.button == SDL_BUTTON_LEFT && !moved) {
-                    a.selected = pick(&a, e.button.x, e.button.y);
-                    if (a.selected >= 0)
-                        a.follow = FOLLOW_SELECTED;
-                    else if (a.follow == FOLLOW_SELECTED)
-                        a.follow = FOLLOW_NONE;
+                if (!moved && (dragging || panning)) {
+                    int id = pick(a, e.button.x * scale, e.button.y * scale);
+                    if (e.button.button == SDL_BUTTON_LEFT)
+                        select_org(a, id);
+                    else if (a->interface)
+                        interface_context_menu(a, e.button.x * scale, e.button.y * scale, id);
                 }
                 dragging = panning = false;
                 break;
             case SDL_MOUSEMOTION:
-                if (dragging || panning) {
-                    if (abs(e.motion.xrel) + abs(e.motion.yrel) > 1)
-                        moved = true;
-                }
+                if ((dragging || panning) && abs(e.motion.xrel) + abs(e.motion.yrel) > 1)
+                    moved = true;
                 if (dragging) {
-                    a.yaw -= e.motion.xrel * 0.3;
-                    a.pitch += e.motion.yrel * 0.3;
-                    a.pitch = a.pitch < -85 ? -85 : a.pitch > 85 ? 85 : a.pitch;
+                    a->yaw -= e.motion.xrel * 0.3;
+                    a->pitch += e.motion.yrel * 0.3;
+                    a->pitch = a->pitch < -85 ? -85 : a->pitch > 85 ? 85 : a->pitch;
                 } else if (panning) {
-                    double k = a.distance * 0.0015;
-                    a.aim = v3_add(a.aim, v3_add(v3_scale(a.cam_right, -e.motion.xrel * k),
-                                                 v3_scale(a.cam_up, e.motion.yrel * k)));
-                    a.follow = FOLLOW_NONE;
+                    double k = a->distance * 0.0015;
+                    a->aim = v3_add(a->aim, v3_add(v3_scale(a->cam_right, -e.motion.xrel * k),
+                                                   v3_scale(a->cam_up, e.motion.yrel * k)));
+                    a->follow = FOLLOW_NONE;
                 }
                 break;
             case SDL_MOUSEWHEEL:
-                a.distance *= e.wheel.y > 0 ? 1 / 1.12 : 1.12;
-                a.distance = a.distance < 10 ? 10 : a.distance;
+                a->distance *= e.wheel.y > 0 ? 1 / 1.12 : 1.12;
+                a->distance = a->distance < 10 ? 10 : a->distance;
                 break;
             case SDL_KEYDOWN:
-                switch (e.key.keysym.sym) {
-                case SDLK_q:
-                    running = false;
-                    break;
-                case SDLK_ESCAPE:
-                    if (a.selected >= 0) {
-                        a.selected = -1;
-                        if (a.follow == FOLLOW_SELECTED)
-                            a.follow = FOLLOW_NONE;
-                    } else {
-                        running = false;
-                    }
-                    break;
-                case SDLK_SPACE:
-                    a.paused = !a.paused;
-                    break;
-                case SDLK_PERIOD:
-                    if (a.paused)
-                        world_time(&a.w);
-                    break;
-                case SDLK_UP:
-                    a.speed = a.speed + 1 < N_SPEEDS ? a.speed + 1 : a.speed;
-                    break;
-                case SDLK_DOWN:
-                    a.speed = a.speed > 0 ? a.speed - 1 : 0;
-                    break;
-                case SDLK_f:
-                    if (a.follow != FOLLOW_NONE)
-                        a.follow = FOLLOW_NONE;
-                    else
-                        a.follow = a.selected >= 0 ? FOLLOW_SELECTED : FOLLOW_LIFE;
-                    break;
-                case SDLK_n:
-                    a.wo.seed++;
-                    make_world(&a);
-                    break;
-                case SDLK_r:
-                    make_world(&a);
-                    break;
-                case SDLK_HOME:
-                    camera_home(&a);
-                    break;
-                }
+                handle_key(a, e.key.keysym.sym, (SDL_Keymod)e.key.keysym.mod);
                 break;
             }
         }
@@ -546,71 +654,76 @@ int app_main(int argc, char **argv)
         Uint64 now = SDL_GetPerformanceCounter();
         double dt = (double)(now - last) / freq;
         last = now;
+        a->seconds = (double)(now - start) / freq;
         if (dt > 0.25)
             dt = 0.25;
-        double alpha = 1;
-        if (!a.paused) {
-            int rate = k_speeds[a.speed];
+        if (!a->paused) {
+            int rate = k_speeds[a->speed];
             Uint64 budget = now + freq / 80; /* stop stepping after ~12 ms */
             if (rate) {
-                a.acc += dt * rate;
-                while (a.acc >= 1 && SDL_GetPerformanceCounter() < budget) {
-                    world_time(&a.w);
-                    a.acc -= 1;
+                a->acc += dt * rate;
+                while (a->acc >= 1 && SDL_GetPerformanceCounter() < budget) {
+                    world_time(&a->w);
+                    a->acc -= 1;
                 }
-                if (a.acc > 4)
-                    a.acc = 1; /* behind: drop the debt rather than spiral */
-                alpha = a.acc < 1 ? a.acc : 1;
+                if (a->acc > 4)
+                    a->acc = 1; /* behind: drop the debt rather than spiral */
+                a->alpha = a->acc < 1 ? a->acc : 1;
             } else {
                 while (SDL_GetPerformanceCounter() < budget)
-                    world_time(&a.w);
+                    world_time(&a->w);
+                a->alpha = 1;
             }
         }
 
-        /* the aim drifts after what it follows */
-        Organism *sel = a.selected >= 0 ? find_org(&a.w, a.selected) : NULL;
-        if (a.selected >= 0 && !sel) {
-            a.selected = -1; /* gone: decayed away */
-            if (a.follow == FOLLOW_SELECTED)
-                a.follow = FOLLOW_NONE;
+        /* the selection: still there, still alive? */
+        Organism *sel = a->selected >= 0 ? app_find(&a->w, a->selected) : NULL;
+        if (a->selected >= 0 && !sel) {
+            interface_note(a, false, "#%d has decayed away", a->selected);
+            select_org(a, -1);
+        } else if (sel && a->selected_was_alive && !sel->alive) {
+            interface_note(a, true, "#%d died", sel->id);
+            a->selected_was_alive = false;
         }
-        V3 target = a.aim;
-        if (a.follow == FOLLOW_SELECTED && sel) {
+        V3 target = a->aim;
+        if (a->follow == FOLLOW_SELECTED && sel) {
             Quat q;
-            org_draw_pose(sel, alpha, &target, &q);
-        } else if (a.follow == FOLLOW_LIFE) {
-            target = world_life_centre_or_box(&a.w);
+            app_draw_pose(sel, a->alpha, &target, &q);
+        } else if (a->follow == FOLLOW_LIFE) {
+            target = world_life_centre_or_box(&a->w);
         }
-        double k = 1 - exp(-dt * (a.follow == FOLLOW_SELECTED ? 8.0 : 2.0));
-        a.aim = v3_add(a.aim, v3_scale(v3_sub(target, a.aim), k));
+        double k = 1 - exp(-dt * (a->follow == FOLLOW_SELECTED ? 8.0 : 2.0));
+        a->aim = v3_add(a->aim, v3_scale(v3_sub(target, a->aim), k));
 
-        platform_window_refresh_size(&a.win);
-        draw(&a, alpha, (double)(now - start) / freq);
-        platform_window_swap(&a.win);
+        platform_window_refresh_size(&a->win);
+        draw(a);
+        platform_window_swap(&a->win);
 
         frames_since++;
         frames_total++;
-        double elapsed = (double)(SDL_GetPerformanceCounter() - start) / freq;
-        if (run_for > 0 && elapsed >= run_for) {
-            fprintf(stderr, "%ld pictures in %.1f s: %.1f fps, %d segments, %d organisms, time %lld\n",
-                    frames_total, elapsed, frames_total / elapsed, a.ninst, a.w.norgs,
-                    (long long)(a.w.frame / 256));
-            running = false;
-        }
         Uint32 ms = SDL_GetTicks();
-        if (ms - last_title > 500) {
-            update_title(&a, frames_since * 1000.0 / (ms - last_title));
-            last_title = ms;
+        if (ms - last_fps >= 500) {
+            a->fps = frames_since * 1000.0 / (ms - last_fps);
+            last_fps = ms;
             frames_since = 0;
         }
+        if (run_for > 0 && a->seconds >= run_for) {
+            fprintf(stderr, "%ld pictures in %.1f s: %.1f fps, %d segments, %d organisms, time %lld\n",
+                    frames_total, a->seconds, frames_total / a->seconds, a->ninst, a->w.norgs,
+                    (long long)(a->w.frame / 256));
+            a->running = false;
+        }
     }
+    if (a->interface)
+        interface_shutdown();
+    gl2d_shutdown();
     lines_destroy();
     capsules_destroy();
     lighting_destroy();
-    platform_window_destroy(&a.win);
-    free(a.inst);
-    free(a.inst_org);
-    free(a.lines);
-    world_free(&a.w);
+    platform_window_destroy(&a->win);
+    free(a->inst);
+    free(a->inst_org);
+    free(a->lines);
+    world_free(&a->w);
     return 0;
 }

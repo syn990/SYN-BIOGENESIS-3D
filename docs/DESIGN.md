@@ -36,9 +36,24 @@ not), and the carbon and energy books balance on every frame.
        segments);
      - 76 a second for 1,259 organisms and 25,607 segments, while the world
        runs 60 frames a second.
-3. **The SYN-OS interface**, drawn through SYN-TREK's GL interface layer
-   (`ui/ui_render.c` there), because SYN-BIOGENESIS's shell is drawn with
-   SDL_Renderer, which doesn't share a window with a GL context.
+3. **The SYN-OS interface** (under way). It is drawn over the scene in the
+   same GL window.
+   - **From SYN-BIOGENESIS:** the SYN-OS skin and its theme reader
+     (`src/ui/skin.c`, `theme.c`), whose only drawing calls (rectangles,
+     triangles, text textures) now go to a small batched GL layer
+     (`src/ui/gl2d.c`).
+   - **The shell** (`src/ui/shell.c`) follows SYN-BIOGENESIS's: the bar,
+     notifications, the labwc menu, the drop-down console, the key hints
+     and the organism's card. It runs on this program's own immediate-mode
+     input (`src/ui/input.c`). Whatever the interface drew last frame is
+     solid: a press there never reaches the camera.
+   - **Built:** the bar with the world's figures; the card (state, figures,
+     life and energy bars, a kind and a sentence true of the organism, its
+     body turning, Follow, Kill and Release); the main and right-click
+     menus; the console's commands; theme switching, saved, and SYN-OS's
+     own theme by default.
+   - **To come:** the parameters screen, the being library and SYN-BIOGENESIS's
+     field guide and species kinds, in place of the card's simple kinds.
 
 Later: the arena, the telescope (the dice are the same java.util.Random,
 so every gene is still a place on its seed's stream), the being library and

@@ -34,6 +34,7 @@ typedef struct {
     float light_dir[3]; /* toward the light, unit */
     float fog_rgb[3];
     float fog_near, fog_far;
+    float depth_step; /* world units a capsule may be nudged toward the eye */
 } SceneView;
 
 void capsules_init(void);

@@ -14,8 +14,8 @@ The difference is that they now live in a box rather than on a plane:
 A 0.9 being imports as it is and arrives flat; its descendants can learn
 depth by mutation.
 
-Steps 1 and 2 of three are built: the simulation, and the window it runs
-in.
+Steps 1 and 2 of three are built, and step 3 is under way: the simulation,
+the window it runs in, and the SYN-OS interface over it.
 - [docs/DESIGN.md](docs/DESIGN.md) has the plan, what is kept from 0.9 and
   every change with its reason.
 - [docs/sweep](docs/sweep/README.md) asks whether 0.9's life copes with the
@@ -29,7 +29,8 @@ in.
 
 ## Build and run
 
-C11, SDL2 and libepoxy (OpenGL 3.3); cglm comes in `third_party`.
+C11, SDL2, SDL2_ttf and libepoxy (OpenGL 3.3); cglm comes in `third_party`,
+the fonts and SYN-OS themes in `assets`.
 `make NO_WINDOW=1` builds the same program without a window, needing only
 the C maths library.
 
@@ -46,19 +47,35 @@ In the window, every segment is a lit capsule. Bites, infections and kills
 flash and bloom. The world keeps its own tick, and the picture is drawn
 between ticks, so motion stays smooth at any speed.
 
+Over it is the SYN-OS interface, in the SYN-OS theme your desktop has on
+(`~/.config/syn-os/current-theme`), or the one last chosen:
+- **the bar** (waybar's): the speed, the living, the time, the dead, O2, CO2,
+  kills, the frame rate, the theme, and MENU;
+- **the card** (SYN-TREK's target card), for a selected organism:
+  - its state and figures, and its life and energy as bars;
+  - its kind, in a sentence true of it;
+  - its body, turning;
+  - Follow, Kill and Release;
+- **menus** (labwc's), from MENU or a right click;
+- **notifications** (mako's), and the key hints along the bottom;
+- **the console** (a drop-down foot, `` ` ``). It takes commands: `help`,
+  `seed N`, `size W H D`, `pitch P`, `import FILE [K]`, `speed N`, `step N`,
+  `theme NAME`, `themes`, `select ID`, `genes`... `genes` lists the
+  selected organism's genes, with how far each one bends.
+
 | key or mouse | does |
 |---|---|
 | drag / right-drag / wheel | turn the camera / move it / zoom |
-| click | select an organism, and follow it |
+| click, right-click | select an organism (and follow it), a menu |
 | space, `.` | pause, one frame while paused |
 | up, down | faster, slower (5 to 960 world frames a second, or as fast as it goes) |
-| `f` | follow the selection or the life, or stop |
+| `f`, `k` | follow the selection or the life, or stop; kill the selection |
 | `n`, `r`, home | next seed, restart, the whole box again |
+| `t`, shift+`t`, `h` | next theme, previous theme, hide the key hints |
+| `` ` `` | the console |
 | esc | drop the selection, then quit |
 
-The title bar shows the seed, the time, the living and the dead, kills, the
-speed, the frame rate and the selected organism. `--shot FILE.ppm` draws one
-picture and quits; `--help` lists everything.
+`--shot FILE.ppm` draws one picture and quits; `--help` lists everything.
 
 `--headless` runs the world without a window. It prints a CSV row per
 report:
@@ -91,8 +108,13 @@ The code comes by way of [SYN-BIOGENESIS](https://github.com/syn990/SYN-BIOGENES
 the C rewrite of 0.9. Each source file names what it was grown from.
 `src/sim/dmath.c` holds fdlibm's sine and cosine kernels, copyright (c) 1993
 Sun Microsystems, freely distributable with their notice. The window, shader
-loader and lighting pipeline come from SYN-TREK. cglm (`third_party/cglm`)
-is copyright (c) 2015 Recep Aslantas, under the MIT licence. This project is
+loader and lighting pipeline come from SYN-TREK. The SYN-OS skin and themes
+come from SYN-BIOGENESIS, which follows SYN-DEBT. cglm (`third_party/cglm`)
+is copyright (c) 2015 Recep Aslantas, under the MIT licence.
+- **Fonts:** in `assets/fonts`, each with its licence file:
+  - Noto Sans and SYN Terminal (Terminus, cut down and renamed), under the
+    SIL Open Font License;
+  - Font Awesome Free 7's solid icons, under the SIL Open Font License. This project is
 not affiliated with the Biogenesis authors.
 
 ## Licence

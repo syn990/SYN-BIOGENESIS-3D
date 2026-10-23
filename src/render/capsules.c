@@ -40,6 +40,8 @@ static const char *VS =
     "layout(location = 5) in float iRadius;\n"
     "layout(location = 6) in float iGlow;\n"
     "uniform mat4 uViewProj;\n"
+    "uniform vec3 uEyeV;\n"
+    "uniform float uDepthStep;\n"
     "out vec3 vNormal;\n"
     "out vec3 vWorld;\n"
     "out vec3 vRgb;\n"
@@ -53,6 +55,11 @@ static const char *VS =
     "    vec3 v = cross(w, u);\n"
     "    vec3 n = u * aOff.x + v * aOff.y + w * aOff.z;\n"
     "    vec3 p = iA + axis * aT + n * iRadius;\n"
+    "    /* Segments that meet or lie along each other have surfaces in the\n"
+    "       same place, which would fight for the same pixels. Each capsule\n"
+    "       is nudged toward the eye by its own few steps of depth precision,\n"
+    "       so one always wins and the picture holds still. */\n"
+    "    p += normalize(uEyeV - p) * uDepthStep * float(gl_InstanceID % 13);\n"
     "    vNormal = n;\n"
     "    vWorld = p;\n"
     "    vRgb = iRgb;\n"
@@ -91,7 +98,8 @@ static const char *FS =
 
 static GLuint g_prog, g_vao, g_mesh_vbo, g_mesh_ibo, g_inst_vbo;
 static GLsizei g_index_count;
-static GLint u_view_proj, u_eye, u_light, u_ambient, u_fog, u_fog_near, u_fog_far;
+static GLint u_view_proj, u_eye, u_eye_v, u_depth_step, u_light, u_ambient, u_fog, u_fog_near,
+    u_fog_far;
 static size_t g_inst_cap;
 
 void capsules_init(void)
@@ -99,6 +107,8 @@ void capsules_init(void)
     g_prog = shader_program(VS, FS);
     u_view_proj = glGetUniformLocation(g_prog, "uViewProj");
     u_eye = glGetUniformLocation(g_prog, "uEye");
+    u_eye_v = glGetUniformLocation(g_prog, "uEyeV");
+    u_depth_step = glGetUniformLocation(g_prog, "uDepthStep");
     u_light = glGetUniformLocation(g_prog, "uLightDir");
     u_ambient = glGetUniformLocation(g_prog, "uAmbient");
     u_fog = glGetUniformLocation(g_prog, "uFog");
@@ -197,6 +207,8 @@ void capsules_draw(const CapsuleInstance *inst, int n, const SceneView *view)
     glUseProgram(g_prog);
     glUniformMatrix4fv(u_view_proj, 1, GL_FALSE, view->view_proj);
     glUniform3fv(u_eye, 1, view->eye);
+    glUniform3fv(u_eye_v, 1, view->eye);
+    glUniform1f(u_depth_step, view->depth_step);
     glUniform3fv(u_light, 1, view->light_dir);
     glUniform1f(u_ambient, g_graphics.ambient);
     glUniform3fv(u_fog, 1, view->fog_rgb);
