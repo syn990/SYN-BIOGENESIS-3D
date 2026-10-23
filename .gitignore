@@ -1,0 +1,8 @@
+/obj/
+/syn-biogenesis-3d
+/tests/check
+/tests/syn-biogenesis-3d-O0
+/runs/
+__pycache__/
+/tests/syn-biogenesis-3d-clang
+/runs-*/
