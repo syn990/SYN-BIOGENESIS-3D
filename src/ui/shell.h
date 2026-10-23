@@ -60,6 +60,8 @@
 #define ICON_VIRUS "\xee\x81\xb4"
 #define ICON_LEAF "\xef\x81\xac"
 #define ICON_BOLT "\xef\x83\xa7"
+#define ICON_SLIDERS "\xef\x87\x9e"
+#define ICON_BOOKMARK "\xef\x80\xae"
 
 #define SHELL_BAR_H 44
 #define SHELL_HINTS_H 26

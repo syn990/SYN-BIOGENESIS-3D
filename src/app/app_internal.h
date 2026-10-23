@@ -19,6 +19,7 @@
 
 #include <stdbool.h>
 
+#include "app/library.h"
 #include "options.h"
 #include "platform/window.h"
 #include "render/capsules.h"
@@ -48,7 +49,12 @@ enum {
     ACT_HINTS,
     ACT_QUIT,
     ACT_WORLD_TAB,
+    ACT_LIBRARY_TAB,
+    ACT_PARAMS_TAB,
+    ACT_KEEP,
 };
+
+typedef enum { SCREEN_WORLD, SCREEN_LIBRARY, SCREEN_PARAMS } Screen;
 
 /* world frames per second; the last is "as many as fit" */
 extern const int k_speeds[];
@@ -62,6 +68,13 @@ typedef struct App {
     bool running;
     bool interface; /* the SYN-OS interface is up (fonts found) */
     bool hints;     /* the key hints along the bottom */
+    Screen screen;
+    /* the library screen */
+    Library lib;
+    bool lib_read;
+    int lib_folder, lib_sel;
+    float lib_scroll;
+    float params_scroll;
     /* time */
     int speed;
     bool paused;
@@ -100,5 +113,13 @@ void interface_draw(App *a, int w, int h);
 void interface_context_menu(App *a, float x, float y, int organism);
 /* What happened, said where it can be seen. */
 void interface_note(App *a, bool urgent, const char *fmt, ...);
+
+/* screens.c: the screens under the bar, over the world */
+void library_screen(App *a, int w, int h);
+void params_screen(App *a, int w, int h);
+/* The parameter called name (Params' field name), set from text: false if
+ * there is none or the value is out of its range. */
+bool params_set_text(const char *name, const char *value, char *err, int errlen);
+void params_print(void);
 
 #endif

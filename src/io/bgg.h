@@ -28,4 +28,11 @@
 /* NULL with a message in err on failure. */
 GeneticCode *bgg_load(const char *path, char *err, int errlen);
 
+/* Writes gc as 0.9 writes a .bgg. A flat code is exactly 0.9's format; a
+ * bent one adds pitch="..." to its bent genes, declared in the DTD as
+ * optional. The shipped 0.9's own parser reads both and ignores the bends
+ * (checked 2026-10-23 with SYN-BIOGENESIS's tools/javaref BggInterop: the
+ * same symmetry, genes, lengths and turns, bit for bit). */
+bool bgg_save(const char *path, const GeneticCode *gc, char *err, int errlen);
+
 #endif

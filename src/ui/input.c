@@ -38,6 +38,7 @@ static struct {
     char typed[64];
     bool typing;
     char tip[160];
+    float wheel;
 } I = {.scale = 1};
 
 void uiin_begin_frame(float scale)
@@ -47,6 +48,7 @@ void uiin_begin_frame(float scale)
     I.nkeys = 0;
     I.typed[0] = 0;
     I.tip[0] = 0;
+    I.wheel = 0;
     I.cur ^= 1;
     I.nsolid[I.cur] = 0;
 }
@@ -87,7 +89,10 @@ bool uiin_event(const SDL_Event *e)
         return ours;
     }
     case SDL_MOUSEWHEEL:
-        return on_solid(I.mx, I.my);
+        if (!on_solid(I.mx, I.my))
+            return false;
+        I.wheel += e->wheel.preciseY != 0 ? e->wheel.preciseY : (float)e->wheel.y;
+        return true;
     case SDL_KEYDOWN:
         I.mods = (SDL_Keymod)e->key.keysym.mod;
         if (I.nkeys < KEYS)
@@ -188,4 +193,9 @@ void uiin_set_typing(bool on)
 bool uiin_typing(void)
 {
     return I.typing;
+}
+
+float uiin_wheel(void)
+{
+    return I.wheel;
 }

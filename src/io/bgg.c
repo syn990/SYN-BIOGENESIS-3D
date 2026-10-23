@@ -147,3 +147,43 @@ out:
     free(text);
     return gc;
 }
+
+bool bgg_save(const char *path, const GeneticCode *gc, char *err, int errlen)
+{
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        snprintf(err, (size_t)errlen, "%s: cannot write", path);
+        return false;
+    }
+    bool bent = !gc_is_flat(gc);
+    fputs("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+          "<!DOCTYPE genetic_code [\n"
+          "<!ELEMENT genetic_code (gene+)>\n"
+          "<!ATTLIST genetic_code symmetry (1|2|3|4|5|6|7|8) #REQUIRED>\n"
+          "<!ATTLIST genetic_code mirror (yes|no) #REQUIRED>\n"
+          "<!ATTLIST genetic_code disperse (yes|no) #REQUIRED>\n"
+          "<!ELEMENT gene EMPTY>\n"
+          "<!ATTLIST gene length CDATA #REQUIRED>\n"
+          "<!ATTLIST gene theta CDATA #REQUIRED>\n",
+          f);
+    if (bent)
+        fputs("<!ATTLIST gene pitch CDATA #IMPLIED>\n", f);
+    fputs("<!ATTLIST gene color (red|green|blue|cyan|yellow|gray|white) #REQUIRED>\n"
+          "]>\n",
+          f);
+    fprintf(f, "<genetic_code symmetry=\"%d\" mirror=\"%s\" disperse=\"%s\">\n", gc->symmetry,
+            gc->mirror ? "yes" : "no", gc->disperse_children ? "yes" : "no");
+    for (int i = 0; i < gc->ngenes; i++) {
+        const Gene *g = &gc->genes[i];
+        fprintf(f, "\t<gene length=\"%.17g\" theta=\"%.17g\"", g->length, g->theta);
+        if (g->pitch != 0)
+            fprintf(f, " pitch=\"%.17g\"", g->pitch);
+        fprintf(f, " color=\"%s\" />\n", bio_color_name(g->color));
+    }
+    fputs("</genetic_code>\n", f);
+    if (fclose(f) != 0) {
+        snprintf(err, (size_t)errlen, "%s: cannot write", path);
+        return false;
+    }
+    return true;
+}

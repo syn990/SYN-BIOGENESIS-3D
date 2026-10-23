@@ -26,7 +26,9 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
+#include "io/bgg.h"
 #include "sim/params.h"
 #include "sim/world.h"
 
@@ -225,12 +227,49 @@ static void check_worlds(void)
     }
 }
 
+/* A code written as a .bgg and read back is the same code, bends and all;
+ * a flat one is written exactly as 0.9 writes them (no pitch anywhere). */
+static void check_bgg(void)
+{
+    const char *path = "tests/roundtrip.bgg";
+    for (int t = 0; t < 50; t++) {
+        GeneticCode *gc = random_code(1 + t % 8, t % 2, 1 + t % 9, t < 25 ? 0 : 60);
+        char err[256];
+        CHECK(bgg_save(path, gc, err, sizeof err), "save: %s", err);
+        GeneticCode *back = bgg_load(path, err, sizeof err);
+        CHECK(back != NULL, "load: %s", err);
+        if (back) {
+            bool same = back->ngenes == gc->ngenes && back->symmetry == gc->symmetry &&
+                        back->mirror == gc->mirror &&
+                        back->disperse_children == gc->disperse_children;
+            for (int i = 0; same && i < gc->ngenes; i++)
+                same = back->genes[i].length == gc->genes[i].length &&
+                       back->genes[i].theta == gc->genes[i].theta &&
+                       back->genes[i].pitch == gc->genes[i].pitch &&
+                       back->genes[i].color == gc->genes[i].color;
+            CHECK(same, "code %d changed on its way through a .bgg", t);
+            gc_unref(back);
+        }
+        FILE *f = fopen(path, "r");
+        char text[8192] = "";
+        size_t n = f ? fread(text, 1, sizeof text - 1, f) : 0;
+        text[n] = 0;
+        if (f)
+            fclose(f);
+        CHECK(gc_is_flat(gc) == (strstr(text, "pitch") == NULL),
+              "code %d: pitch written %s", t, gc_is_flat(gc) ? "for a flat code" : "missing");
+        gc_unref(gc);
+    }
+    remove(path);
+}
+
 int main(void)
 {
     params_set_defaults(&P);
     jr_set_seed(&g_rng, 1);
     check_trig();
     check_bodies();
+    check_bgg();
     check_worlds();
     if (failures) {
         fprintf(stderr, "%d checks failed\n", failures);

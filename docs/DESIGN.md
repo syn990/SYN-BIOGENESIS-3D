@@ -47,13 +47,23 @@ not), and the carbon and energy books balance on every frame.
      and the organism's card. It runs on this program's own immediate-mode
      input (`src/ui/input.c`). Whatever the interface drew last frame is
      solid: a press there never reaches the camera.
-   - **Built:** the bar with the world's figures; the card (state, figures,
-     life and energy bars, a kind and a sentence true of the organism, its
-     body turning, Follow, Kill and Release); the main and right-click
-     menus; the console's commands; theme switching, saved, and SYN-OS's
-     own theme by default.
-   - **To come:** the parameters screen, the being library and SYN-BIOGENESIS's
-     field guide and species kinds, in place of the card's simple kinds.
+   - **Built:**
+     - the bar with the world's figures;
+     - the card: state, figures, life and energy bars, the kind, its body
+       turning, and Follow, Kill, Keep and Release;
+     - the main and right-click menus, and the console's commands;
+     - theme switching, saved, with SYN-OS's own theme by default.
+   - **The kinds and the field guide** are SYN-BIOGENESIS's
+     (`src/guide`), with its Color Mod branches stripped and a palette of
+     0.9's eight colours alone. The colours' rules are 0.9's, so the guide's
+     words hold in the box too.
+   - **The library screen** reads SYN-BIOGENESIS's folders of 0.9 beings as
+     they are, and keeps this program's own in
+     `~/.config/syn-biogenesis-3d/beings/Kept`. A kept being's .bgg is 0.9's
+     format plus an optional pitch for bent genes, declared in the DTD. The
+     shipped 0.9 jar's parser reads such files and ignores the bends.
+   - **The parameters screen:** 0.9's tunables and the box's, grouped, with
+     + and -; those that need a new world are marked.
 
 Later: the arena, the telescope (the dice are the same java.util.Random,
 so every gene is still a place on its seed's stream), the being library and

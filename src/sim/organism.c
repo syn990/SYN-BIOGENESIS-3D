@@ -100,12 +100,10 @@ static void turtle_pitch(V3 *h, V3 *u, double b)
     *u = nu;
 }
 
-void org_build_body(Organism *o)
+void gc_body_shape(const GeneticCode *gc, double scale, V3 *bs, V3 *be)
 {
-    const GeneticCode *gc = o->gc;
     int symmetry = gc->symmetry;
-    int sequence = o->segments / symmetry;
-    double scale = k_scale[o->growth_ratio - 1];
+    int sequence = gc->ngenes;
     int seg = 0;
 
     for (int i = 0; i < symmetry; i++) {
@@ -125,11 +123,16 @@ void org_build_body(Organism *o)
             turtle_pitch(&h, &u, g->pitch);
             h = v3_unit_or(h, h);
             u = v3_unit_or(v3_sub(u, v3_scale(h, v3_dot(h, u))), u);
-            o->bs[seg] = p;
+            bs[seg] = p;
             p = v3_add(p, v3_scale(h, g->length / scale));
-            o->be[seg] = p;
+            be[seg] = p;
         }
     }
+}
+
+void org_build_body(Organism *o)
+{
+    gc_body_shape(o->gc, k_scale[o->growth_ratio - 1], o->bs, o->be);
 
     /* A segment weighs its length, as in 0.9. The body turns about its
      * centre of mass (0.9 turned it about the middle of its bounding box). */

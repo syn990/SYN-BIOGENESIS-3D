@@ -39,6 +39,8 @@ void uiin_solid(UIRect r);             /* r is part of the interface this frame 
 void uiin_tooltip(const char *s);      /* shown by uiin_draw_tooltip at the end */
 void uiin_draw_tooltip(const Fonts *f, int w, int h);
 void uiin_mouse(float *x, float *y);
+/* The wheel this frame (up positive), when it turned over the interface. */
+float uiin_wheel(void);
 
 /* Keys pressed this frame, and typed text, for the console. */
 bool uiin_key(SDL_Keycode k);

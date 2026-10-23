@@ -18,11 +18,12 @@ PKG_CONFIG ?= pkg-config
 SIM = src/sim/dmath.c src/sim/jrandom.c src/sim/params.c src/sim/genetic_code.c \
       src/sim/organism.c src/sim/world.c src/io/bgg.c
 CORE = src/options.c src/headless.c
-WIN = src/app/app.c src/app/interface.c src/platform/window.c src/render/shader.c \
+WIN = src/app/app.c src/app/interface.c src/app/screens.c src/app/library.c src/platform/window.c src/render/shader.c \
       src/render/lighting.c src/render/capsules.c src/render/lines.c src/ui/gl2d.c \
-      src/ui/input.c src/ui/skin.c src/ui/theme.c src/ui/shell.c
+      src/ui/input.c src/ui/skin.c src/ui/theme.c src/ui/shell.c src/guide/palette.c \
+      src/guide/kind.c src/guide/lexicon.c src/guide/guide.c
 HEADERS = $(wildcard src/*.h src/sim/*.h src/io/*.h src/app/*.h src/render/*.h src/platform/*.h \
-          src/ui/*.h)
+          src/ui/*.h src/guide/*.h)
 
 OBJ_SIM = $(SIM:src/%.c=obj/%.o)
 OBJ_CORE = $(CORE:src/%.c=obj/%.o)

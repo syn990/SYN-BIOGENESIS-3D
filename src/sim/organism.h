@@ -93,6 +93,10 @@ bool org_place_with_code(Organism *o, GeneticCode *gc);
 /* A child of parent: mutated code, placed beside it. */
 bool org_inherit(Organism *o, Organism *parent, bool first);
 
+/* The body a code grows, segment by segment (ngenes x symmetry of them),
+ * from the arms' shared root, with its gene lengths divided by scale (1 for
+ * an adult). Pure: no dice, no organism; what a preview draws. */
+void gc_body_shape(const GeneticCode *gc, double scale, V3 *bs, V3 *be);
 /* Build the body from the code at the current growth stage. */
 void org_build_body(Organism *o);
 /* Move the body's segments and bounding box to pos and q. */

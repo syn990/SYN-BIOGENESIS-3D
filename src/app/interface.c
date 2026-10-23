@@ -25,13 +25,26 @@
 #include <strings.h>
 
 #include "app/app_internal.h"
+#include "guide/guide.h"
+#include "guide/kind.h"
 #include "sim/params.h"
 #include "ui/input.h"
 #include "ui/shell.h"
 
+static char g_assets[1024];
+
+/* where the assets are, for the kinds' book of words (guide/kind.c) */
+const char *gfx_asset(const char *rel)
+{
+    static char path[1200];
+    snprintf(path, sizeof path, "%s/%s", g_assets, rel);
+    return path;
+}
+
 bool interface_init(App *a, const char *assets)
 {
     (void)a;
+    snprintf(g_assets, sizeof g_assets, "%s", assets);
     if (!shell_init(assets))
         return false;
     shell_print(SHELL_HEAD, "SYN-BIOGENESIS-3D");
@@ -57,65 +70,16 @@ void interface_note(App *a, bool urgent, const char *fmt, ...)
 
 /* ---- what an organism is ---- */
 
-typedef struct {
-    double len[COL_COUNT];
-    double total;
-} Makeup;
-
-static Makeup makeup(const Organism *o)
-{
-    Makeup m = {{0}, 0};
-    const GeneticCode *gc = o->gc;
-    for (int i = 0; i < gc->ngenes; i++) {
-        m.len[gc->genes[i].color] += gc->genes[i].length * gc->symmetry;
-        m.total += gc->genes[i].length * gc->symmetry;
-    }
-    return m;
-}
-
-/* A kind from what its genes are made of, and a sentence that is true of
- * it: the figures in the sentence are its own. */
+/* SYN-BIOGENESIS's kind (guide/kind.c: SYN-TREK's way of naming planets,
+ * read from what the genes do) and its sentence, then whether the body is
+ * flat, as 0.9 grew them, or bent into the third dimension. */
 static void describe(const Organism *o, char *kind, size_t kn, char *about, size_t an)
 {
-    Makeup m = makeup(o);
-    double t = m.total > 0 ? m.total : 1;
-    double green = m.len[COL_GREEN] / t, red = m.len[COL_RED] / t, white = m.len[COL_WHITE] / t;
-    double gray = m.len[COL_GRAY] / t, blue = m.len[COL_BLUE] / t, cyan = m.len[COL_CYAN] / t;
-    const char *shape = gc_is_flat(o->gc) ? "flat, as in 0.9" : "bent into the third dimension";
-    if (!o->alive) {
-        snprintf(kind, kn, "Husk");
-        snprintf(about, an, "A corpse: it drifts and decays back into CO2. It was %s.", shape);
-    } else if (white >= 0.15) {
-        snprintf(kind, kn, "Virus");
-        snprintf(about, an,
-                 "%.0f%% white: what it touches gives birth to its kind instead of its own. %s.",
-                 100 * white, gc_is_flat(o->gc) ? "Flat" : "Bent");
-    } else if (gray >= 0.15) {
-        snprintf(kind, kn, "Killer");
-        snprintf(about, an, "%.0f%% gray: what it touches dies. Its body is %s.", 100 * gray, shape);
-    } else if (red >= 0.2 && green < 0.25) {
-        snprintf(kind, kn, "Hunter");
-        snprintf(about, an, "%.0f%% red, %.0f%% green: it lives by eating what it touches.",
-                 100 * red, 100 * green);
-    } else if (red >= 0.1 && green >= 0.25) {
-        snprintf(kind, kn, "Omnivore");
-        snprintf(about, an, "%.0f%% green and %.0f%% red: it lives on light and on what it eats.",
-                 100 * green, 100 * red);
-    } else if (green >= 0.5) {
-        snprintf(kind, kn, "Plant");
-        snprintf(about, an, "%.0f%% green: it lives on light and the CO2 in the water. %s.",
-                 100 * green, gc_is_flat(o->gc) ? "Flat, as in 0.9" : "Bent into the third dimension");
-    } else if (blue >= 0.25) {
-        snprintf(kind, kn, "Fortress");
-        snprintf(about, an, "%.0f%% blue: its shields turn red, white and gray away.", 100 * blue);
-    } else if (cyan >= 0.3) {
-        snprintf(kind, kn, "Drifter");
-        snprintf(about, an, "%.0f%% cyan: its cilia kick it about at random.", 100 * cyan);
-    } else {
-        snprintf(kind, kn, "Mixed");
-        snprintf(about, an, "%.0f%% green, %.0f%% red, %.0f%% blue, %.0f%% cyan.", 100 * green,
-                 100 * red, 100 * blue, 100 * cyan);
-    }
+    syn_kind_label(o->gc, kind, kn);
+    char sentence[256];
+    syn_kind_describe(o->gc, sentence, sizeof sentence);
+    snprintf(about, an, "%s %s", sentence,
+             gc_is_flat(o->gc) ? "Flat, as 0.9 grew them." : "Bent into the third dimension.");
 }
 
 /* ---- the card ---- */
@@ -217,6 +181,8 @@ static void card(App *a, int w, int h)
                                              "Keep the camera on it"};
     c.actions[c.nactions++] = (ShellCommand){ACT_KILL, "Kill", "K", ICON_SKULL, !o->alive, false,
                                              "It dies where it is"};
+    c.actions[c.nactions++] = (ShellCommand){ACT_KEEP, "Keep", NULL, ICON_BOOKMARK, false, false,
+                                             "Keep its code in the library (Kept)"};
     c.actions[c.nactions++] = (ShellCommand){ACT_DESELECT, "Release", "Esc", ICON_XMARK, false,
                                              false, "Let it go"};
     c.draw_body = draw_body;
@@ -239,6 +205,9 @@ static void main_menu(App *a, float x, float y)
         {ACT_SLOWER, "Slower", "Down", ICON_MINUS, false, false, NULL},
         {ACT_NEXT_SEED, "Next seed", "N", ICON_DICE, false, false, NULL},
         {ACT_RESTART, "Restart", "R", ICON_ROTATE, false, false, NULL},
+        {0, "SCREENS", NULL, NULL, false, false, NULL},
+        {ACT_LIBRARY_TAB, "Library", "L", ICON_DNA, false, a->screen == SCREEN_LIBRARY, NULL},
+        {ACT_PARAMS_TAB, "Parameters", "P", ICON_SLIDERS, false, a->screen == SCREEN_PARAMS, NULL},
         {0, "VIEW", NULL, NULL, false, false, NULL},
         {ACT_FOLLOW, "Follow", "F", ICON_EYE, false, a->follow != FOLLOW_NONE, NULL},
         {ACT_HOME, "The whole box", "Home", ICON_HOUSE, false, false, NULL},
@@ -266,9 +235,10 @@ void interface_context_menu(App *a, float x, float y, int organism)
     ShellCommand items[] = {
         {ACT_FOLLOW, "Follow", "F", ICON_EYE, false, a->follow == FOLLOW_SELECTED, NULL},
         {ACT_KILL, "Kill", "K", ICON_SKULL, !(o && o->alive), false, NULL},
+        {ACT_KEEP, "Keep in the library", NULL, ICON_BOOKMARK, false, false, NULL},
         {ACT_DESELECT, "Release", "Esc", ICON_XMARK, false, false, NULL},
     };
-    shell_menu_open(x, y, title, items, 3);
+    shell_menu_open(x, y, title, items, 4);
 }
 
 /* ---- the console ---- */
@@ -276,7 +246,8 @@ void interface_context_menu(App *a, float x, float y, int organism)
 static const char *const k_words[] = {
     "help",  "seed",   "next",  "restart", "size",   "pitch",  "organisms", "co2",
     "import", "speed", "pause", "go",      "step",   "theme",  "themes",    "follow",
-    "home",  "select", "kill",  "genes",   "hints",  "clear",  "quit",
+    "home",  "select", "kill",  "genes",   "hints",  "clear",  "quit",      "colour",
+    "guide", "kind",   "kinds", "set",     "params", "library", "keep",
 };
 
 static void help(void)
@@ -293,6 +264,12 @@ static void help(void)
         "VIEW",
         "  follow / home      the camera                     theme [NAME] / themes",
         "  select ID / kill   an organism                    genes: the selected one's",
+        "PARAMETERS AND BEINGS",
+        "  params             every parameter and its value  set NAME VALUE",
+        "  library            the beings' screen             keep: keep the selected one",
+        "FIELD GUIDE",
+        "  guide              what every colour does         colour NAME: one, at length",
+        "  kind               what the selected one is       kinds: every kind",
         "  hints / clear / quit",
     };
     for (size_t i = 0; i < sizeof lines / sizeof lines[0]; i++)
@@ -428,6 +405,49 @@ static void run(App *a, const char *entered)
     } else if (!strcasecmp(c, "clear")) {
         for (int i = 0; i < 40; i++)
             shell_print(SHELL_OUT, "%s", "");
+    } else if (!strcasecmp(c, "guide")) {
+        shell_print(SHELL_HEAD, "THE COLOURS (the same rules as 0.9)");
+        for (int k = 0; k < COL_COUNT; k++)
+            shell_print(SHELL_OUT, "  %-7s %s", syn_col_name(k), syn_guide_short(k));
+    } else if (!strcasecmp(c, "colour") || !strcasecmp(c, "color")) {
+        int k = argc > 1 ? syn_guide_find(argv[1]) : -1;
+        if (k < 0) {
+            shell_print(SHELL_ERROR, "colour NAME: one of green, red, cyan, blue, white, gray, "
+                                     "yellow, brown");
+        } else {
+            shell_print(SHELL_HEAD, "%s", syn_col_name(k));
+            shell_print(SHELL_OUT, "  %s", syn_guide_short(k));
+            shell_print(SHELL_OUT, "  %s", syn_guide_long(k));
+        }
+    } else if (!strcasecmp(c, "kind")) {
+        Organism *o = a->selected >= 0 ? app_find(&a->w, a->selected) : NULL;
+        if (!o) {
+            shell_print(SHELL_ERROR, "nothing selected: click an organism, or 'select ID'");
+        } else {
+            char kind[96], about[300];
+            describe(o, kind, sizeof kind, about, sizeof about);
+            shell_print(SHELL_HEAD, "#%d: %s", o->id, kind);
+            shell_print(SHELL_OUT, "  %s", syn_kind_meaning(syn_kind(o->gc, NULL, 0)));
+            shell_print(SHELL_OUT, "  %s", about);
+        }
+    } else if (!strcasecmp(c, "kinds")) {
+        for (int k = 0; k < KIND_COUNT; k++)
+            if (k != KIND_GRAZER && k != KIND_HUNTER && k != KIND_OMNIVORE && k != KIND_RAIDER &&
+                k != KIND_SCAVENGER && k != KIND_PARASITE) /* Color Mod's eaters */
+                shell_print(SHELL_OUT, "  %-11s %s", syn_kind_name((Kind)k),
+                            syn_kind_meaning((Kind)k));
+    } else if (!strcasecmp(c, "params")) {
+        params_print();
+    } else if (!strcasecmp(c, "set") && argc > 2) {
+        char err[160];
+        if (params_set_text(argv[1], argv[2], err, sizeof err))
+            shell_print(SHELL_GOOD, "%s = %s", argv[1], argv[2]);
+        else
+            shell_print(SHELL_ERROR, "%s", err);
+    } else if (!strcasecmp(c, "library")) {
+        app_do(a, ACT_LIBRARY_TAB);
+    } else if (!strcasecmp(c, "keep")) {
+        app_do(a, ACT_KEEP);
     } else if (!strcasecmp(c, "quit")) {
         app_do(a, ACT_QUIT);
     } else {
@@ -442,7 +462,11 @@ void interface_draw(App *a, int w, int h)
     const World *wd = &a->w;
     shell_begin(w, h);
 
-    ShellTab tabs[] = {{"WORLD", ICON_GLOBE, ACT_WORLD_TAB, true, false}};
+    ShellTab tabs[] = {
+        {"WORLD", ICON_GLOBE, ACT_WORLD_TAB, a->screen == SCREEN_WORLD, false},
+        {"LIBRARY", ICON_DNA, ACT_LIBRARY_TAB, a->screen == SCREEN_LIBRARY, false},
+        {"PARAMETERS", ICON_SLIDERS, ACT_PARAMS_TAB, a->screen == SCREEN_PARAMS, false},
+    };
     ShellModule mods[9];
     int nm = 0;
     double carbon = wd->o2 + wd->co2;
@@ -468,7 +492,7 @@ void interface_draw(App *a, int w, int h)
                              ACT_THEME_NEXT};
     snprintf(mods[nm++].text, sizeof mods[0].text, "%s", theme_short_name(skin_theme()));
 
-    int got = shell_bar(w, "SYN-BIOGENESIS-3D", tabs, 1, mods, nm, ACT_MENU);
+    int got = shell_bar(w, "SYN-BIOGENESIS-3D", tabs, 3, mods, nm, ACT_MENU);
     if (got == ACT_MENU)
         main_menu(a, (float)w - 10, SHELL_BAR_H + 4);
     else if (got)
@@ -479,8 +503,14 @@ void interface_draw(App *a, int w, int h)
     if (line)
         run(a, line);
 
-    if (!shell_console_showing())
-        card(a, w, a->hints ? h : h + SHELL_HINTS_H);
+    if (!shell_console_showing()) {
+        if (a->screen == SCREEN_LIBRARY)
+            library_screen(a, w, h);
+        else if (a->screen == SCREEN_PARAMS)
+            params_screen(a, w, h);
+        else
+            card(a, w, a->hints ? h : h + SHELL_HINTS_H);
+    }
 
     if (a->hints) {
         static const char *const keys[] = {
@@ -492,7 +522,8 @@ void interface_draw(App *a, int w, int h)
                  wd->height, wd->depth);
         shell_hints(w, h, keys, (int)(sizeof keys / sizeof keys[0]) / 2, right);
     }
-    shell_notifications(w, SHELL_BAR_H);
+    /* under a screen's title bar when one is up */
+    shell_notifications(w, SHELL_BAR_H + (a->screen != SCREEN_WORLD && !shell_console_showing() ? 44 : 0));
     int picked = shell_menu(w, h);
     if (picked)
         app_do(a, picked);

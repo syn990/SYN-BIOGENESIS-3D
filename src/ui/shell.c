@@ -510,15 +510,42 @@ int shell_card(int w, int h, const ShellCard *c)
             skin_fill(ui_rect(bx + lw + (float)i * (sw + 2), by + 1, sw, 12), on,
                       i < lit ? 1.0f : 0.16f);
     }
-    /* what kind of being it is, and its sentence, one line */
+    /* what kind of being it is: the kind, then its sentence, two lines at
+     * most (SYN-BIOGENESIS's wrap) */
     if (c->kind[0] || c->about[0]) {
-        float ky = by + 22, kx = r.x + 12;
+        float lh = skin_text_height(fo->small) + 4, ky = by + 22, kx = r.x + 12, right = r.x + r.w - 12;
         float x = kx;
         if (c->kind[0])
             x += ink(fo->small_bold, c->kind, kx, ky, skin_tone(TONE_ACCENT), ALIGN_LEFT) + 10;
-        char fit[300];
-        ink(fo->small, skin_fit(fo->small, c->about, r.x + r.w - 12 - x, fit, sizeof fit), x, ky,
-            skin_tone(TONE_MUTED), ALIGN_LEFT);
+        const char *p = c->about;
+        char line[400];
+        for (int ln = 0; ln < 2 && *p; ln++) {
+            size_t n = 0;
+            const char *q = p;
+            while (*q) {
+                const char *wd = q + strspn(q, " "), *we = wd + strcspn(wd, " ");
+                char cand[400];
+                snprintf(cand, sizeof cand, "%.*s%s%.*s", (int)n, line, n ? " " : "",
+                         (int)(we - wd), wd);
+                if (n && text_w(fo->small, cand) > right - x)
+                    break;
+                n = strlen(cand) < sizeof line - 1 ? strlen(cand) : sizeof line - 1;
+                memcpy(line, cand, n);
+                q = we;
+            }
+            line[n] = '\0';
+            if (ln == 1 && *q) {
+                char fit[sizeof line + 8];
+                snprintf(fit, sizeof fit, "%s ...", line);
+                snprintf(line, sizeof line, "%.395s", fit);
+            }
+            ink(fo->small, line, x, ky + (float)ln * lh, skin_tone(TONE_MUTED), ALIGN_LEFT);
+            p = q + strspn(q, " ");
+            x = kx;
+        }
+        UIRect kr = {kx, ky - 2, right - kx, lh * 2};
+        if (uiin_over(kr) && c->about[0])
+            uiin_tooltip(c->about);
     }
     /* what can be done to it, along the bottom */
     float ay = r.y + r.h - 10 - 30, ax = r.x + 10;

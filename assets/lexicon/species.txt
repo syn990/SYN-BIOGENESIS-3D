@@ -1,0 +1,188 @@
+# The book of words for species: what the SYN edition says a being is.
+#
+# SYN-TREK's format (src/syn/lexicon.h): a [bank] has an id and words=
+# lines of phrases split on |; a phrase may name other banks in {braces}.
+# An id may carry a tag, the being's kind (src/syn/kind.c): a lookup for
+# `habit` on a grazer takes habit.grazer, else plain habit. "~" is an
+# empty phrase.
+#
+# Bound by the program for each code, never written here:
+#   {size} {Size}  tiny, small, mid-sized, large, huge (the full-grown body)
+#   {arms}         one-armed ... eight-armed
+#   {mirror}       "mirrored, " or nothing
+#   {genes}        "one gene", "12 genes"
+#   {main}         its main colours: "mostly C4", "green and blue"
+#   {kind}         its kind, in lower case: "grazer"
+#
+# What a kind does here must be true of every being of that kind: the
+# kinds are read from the colours, and the colours' rules are the game's.
+
+[bank]
+id=species
+words={Size}, {mirror}{arms} {kind}, {main}. {habit} {closing}
+words=A {size}, {mirror}{arms} {kind}: {main}, {genes}. {habit}
+words={Size} and {arms}, {main}. {habit} {closing}
+words=Survey notes have it as a {size} {kind}: {mirror}{arms}, {main}. {habit}
+words={Size} {kind}, {arms}, {genes}, {main}. {habit} {closing}
+
+[bank]
+id=closing
+words=~
+
+# --- how each kind lives --------------------------------------------
+
+[bank]
+id=habit.plant
+words=It stays where it was born and turns air into body.
+words=It lives on light and CO2 and never travels of its own accord.
+words=It does nothing but photosynthesise, which is often enough.
+words=Everything it has goes into leaves.
+
+[bank]
+id=closing.plant
+words=It asks the world for air and nothing else.|~|Every frame it works, it is paid in light.
+
+[bank]
+id=habit.drifter
+words=It wanders where its movers kick it, photosynthesising as it goes.
+words=It makes its own energy and spends a little of it going somewhere else.
+words=Its leaves feed it while its movers carry it about.
+
+[bank]
+id=closing.drifter
+words=It rarely stays put for long.|~
+
+[bank]
+id=habit.fortress
+words=Much of it is shield; little that bites gets through to its leaves.
+words=It grows behind armour, slowly and hard to touch.
+words=It photosynthesises from behind its own walls.
+
+[bank]
+id=closing.fortress
+words=Patient, and hard to eat.|~
+
+[bank]
+id=habit.nettle
+words=It photosynthesises, and what brushes against it pays for that.
+words=It feeds on light and keeps its neighbours away the hard way.
+words=Its leaves feed it; its other parts deal with whatever comes close.
+
+[bank]
+id=closing.nettle
+words=Best admired from a distance.|~
+
+[bank]
+id=habit.blight
+words=It grows like a plant and spreads like a disease.
+words=Its leaves feed it; its virus makes others raise its young.
+words=What it touches may bear its children instead of their own.
+
+[bank]
+id=closing.blight
+words=Where it grows, others raise its children.|~
+
+[bank]
+id=habit.mixed
+words=It photosynthesises and eats as well, never quite settling on either.
+words=Leaves for the lean times, a mouth for the rest.
+words=It is half a plant and half an eater.
+
+[bank]
+id=closing.mixed
+words=It hedges its bets.|~
+
+[bank]
+id=habit.grazer
+words=It eats plants and little else, and costs little to run.
+words=It works its way through other organisms' leaves.
+words=It lives on plants, wherever it finds them.
+
+[bank]
+id=closing.grazer
+words=Where plants are thick, it does well.|~
+
+[bank]
+id=habit.hunter
+words=It eats other eaters and leaves the plants alone.
+words=It lives on those that live on others.
+words=Plants mean nothing to it; eaters are its food.
+
+[bank]
+id=closing.hunter
+words=It needs other eaters to live.|~
+
+[bank]
+id=habit.omnivore
+words=It bites almost anything that isn't shielded.
+words=It is not particular about what it eats.
+words=Leaves and eaters alike: it takes them both.
+
+[bank]
+id=closing.omnivore
+words=Only shields slow it down.|~
+
+[bank]
+id=habit.raider
+words=It bites eaters hard and everything else a little.
+words=It takes a full bite from eaters and a nibble from the rest.
+
+[bank]
+id=closing.raider
+words=Eaters have most to fear from it.|~
+
+[bank]
+id=habit.scavenger
+words=It lives on the dead, the damaged and viruses.
+words=It cleans up after everything else.
+words=Corpses and the weak are its food.
+
+[bank]
+id=closing.scavenger
+words=It does best where others die.|~
+
+[bank]
+id=habit.parasite
+words=It takes small bites and is hard to infect.
+words=It takes a little from everyone it touches.
+
+[bank]
+id=closing.parasite
+words=It lives off others, a little at a time.|~
+
+[bank]
+id=habit.predator
+words=It bites whatever it touches unless blue stops it.
+words=It eats what it can reach.
+words=Anything without a shield is food to it.
+
+[bank]
+id=closing.predator
+words=Blue is the only answer to it.|~
+
+[bank]
+id=habit.virus
+words=It can't feed; it spreads by making others give birth to it.
+words=It has no leaves and no mouth: other organisms raise its children.
+
+[bank]
+id=closing.virus
+words=It needs hosts to exist at all.|~
+
+[bank]
+id=habit.killer
+words=It is built to kill, not to feed.
+words=It kills what it meets and gains nothing by it.
+
+[bank]
+id=closing.killer
+words=Its line lasts only as long as its children keep being born.|~
+
+[bank]
+id=habit.husk
+words=No leaves, no mouth, no weapon: it lives on the energy it was born with.
+words=It has no way to feed and lives on what it was born with.
+
+[bank]
+id=closing.husk
+words=It won't last long.|~

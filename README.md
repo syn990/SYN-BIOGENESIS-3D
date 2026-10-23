@@ -53,15 +53,26 @@ Over it is the SYN-OS interface, in the SYN-OS theme your desktop has on
   kills, the frame rate, the theme, and MENU;
 - **the card** (SYN-TREK's target card), for a selected organism:
   - its state and figures, and its life and energy as bars;
-  - its kind, in a sentence true of it;
+  - its kind and description, from SYN-BIOGENESIS's species kinds and book
+    of words, with whether it is flat or bent;
   - its body, turning;
-  - Follow, Kill and Release;
+  - Follow, Kill, Keep and Release;
+- **the library** (`l`): SYN-BIOGENESIS's 0.9 beings (Saved, Arena,
+  Imported, Forged) and this program's Kept. Each being has its kind,
+  description, origin and its body turning. It can be put into the running
+  world or used to start a new one. Keep writes a .bgg that 0.9 itself
+  still reads;
+- **the parameters** (`p`): all of 0.9's, and the box's, with + and -.
+  Those marked * take a new world; the rest act at once. In the console,
+  `params` and `set NAME VALUE`;
 - **menus** (labwc's), from MENU or a right click;
 - **notifications** (mako's), and the key hints along the bottom;
 - **the console** (a drop-down foot, `` ` ``). It takes commands: `help`,
   `seed N`, `size W H D`, `pitch P`, `import FILE [K]`, `speed N`, `step N`,
-  `theme NAME`, `themes`, `select ID`, `genes`... `genes` lists the
-  selected organism's genes, with how far each one bends.
+  `theme NAME`, `themes`, `select ID`, `genes`, `guide`, `colour NAME`,
+  `kind`... `genes` lists the selected organism's genes, with how far
+  each one bends. `guide` is SYN-BIOGENESIS's field guide to the colours,
+  whose rules are 0.9's here too.
 
 | key or mouse | does |
 |---|---|
@@ -72,6 +83,7 @@ Over it is the SYN-OS interface, in the SYN-OS theme your desktop has on
 | `f`, `k` | follow the selection or the life, or stop; kill the selection |
 | `n`, `r`, home | next seed, restart, the whole box again |
 | `t`, shift+`t`, `h` | next theme, previous theme, hide the key hints |
+| `l`, `p` | the library, the parameters (esc: back to the world) |
 | `` ` `` | the console |
 | esc | drop the selection, then quit |
 
@@ -108,8 +120,10 @@ The code comes by way of [SYN-BIOGENESIS](https://github.com/syn990/SYN-BIOGENES
 the C rewrite of 0.9. Each source file names what it was grown from.
 `src/sim/dmath.c` holds fdlibm's sine and cosine kernels, copyright (c) 1993
 Sun Microsystems, freely distributable with their notice. The window, shader
-loader and lighting pipeline come from SYN-TREK. The SYN-OS skin and themes
-come from SYN-BIOGENESIS, which follows SYN-DEBT. cglm (`third_party/cglm`)
+loader and lighting pipeline come from SYN-TREK. The SYN-OS skin and themes,
+the field guide, the species kinds and their book of words
+(`assets/lexicon`, SYN-TREK's lexicon format) come from SYN-BIOGENESIS,
+which follows SYN-DEBT. cglm (`third_party/cglm`)
 is copyright (c) 2015 Recep Aslantas, under the MIT licence.
 - **Fonts:** in `assets/fonts`, each with its licence file:
   - Noto Sans and SYN Terminal (Terminus, cut down and renamed), under the

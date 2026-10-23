@@ -29,6 +29,7 @@
  *   up / down       faster / slower          f            follow / stop following
  *   n / r           next seed / restart      home         camera back to the box
  *   t / shift+t     next / previous theme    h            hide / show the key hints
+ *   l / p           the library / the parameters
  *   esc             drop the selection, then quit
  */
 
@@ -406,6 +407,27 @@ void app_do(App *a, int action)
     case ACT_QUIT:
         a->running = false;
         break;
+    case ACT_WORLD_TAB:
+        a->screen = SCREEN_WORLD;
+        break;
+    case ACT_LIBRARY_TAB:
+        a->screen = a->screen == SCREEN_LIBRARY ? SCREEN_WORLD : SCREEN_LIBRARY;
+        a->lib_read = false; /* read the folders again, as they are now */
+        break;
+    case ACT_PARAMS_TAB:
+        a->screen = a->screen == SCREEN_PARAMS ? SCREEN_WORLD : SCREEN_PARAMS;
+        break;
+    case ACT_KEEP: {
+        Organism *o = a->selected >= 0 ? app_find(&a->w, a->selected) : NULL;
+        char path[1100], err[300];
+        if (!o)
+            interface_note(a, true, "Nothing selected to keep");
+        else if (library_keep(o, (long long)a->wo.seed, path, sizeof path, err, sizeof err))
+            interface_note(a, false, "Kept: %s", strrchr(path, '/') ? strrchr(path, '/') + 1 : path);
+        else
+            interface_note(a, true, "%s", err);
+        break;
+    }
     }
 }
 
@@ -420,12 +442,14 @@ static void usage(FILE *f)
           "  --camera Y P D    start the camera at yaw Y, pitch P degrees, distance D,\n"
           "                    aimed at the life\n"
           "  --select ID       start with organism ID selected (-1: the biggest living)\n"
+          "  --screen NAME     start on a screen: world, library or parameters\n"
           "  --seconds S       quit after S seconds and print the frame rate\n"
           "  --window W H      window size (default 1440 900)\n"
           "\n"
           "  drag: turn   right-drag: move   wheel: zoom   click: select   right-click: menu\n"
           "  space: pause   .: one frame   up/down: speed   f: follow   `: console\n"
           "  n: next seed   r: restart   home: whole box   t: theme   h: key hints\n"
+          "  l: library   p: parameters\n"
           "  esc: drop the selection, then quit\n",
           f);
 }
@@ -459,7 +483,18 @@ static void handle_key(App *a, SDL_Keycode k, SDL_Keymod mods)
         app_do(a, ACT_QUIT);
         break;
     case SDLK_ESCAPE:
-        app_do(a, a->selected >= 0 ? ACT_DESELECT : ACT_QUIT);
+        if (a->screen != SCREEN_WORLD)
+            app_do(a, ACT_WORLD_TAB);
+        else
+            app_do(a, a->selected >= 0 ? ACT_DESELECT : ACT_QUIT);
+        break;
+    case SDLK_l:
+        if (a->interface)
+            app_do(a, ACT_LIBRARY_TAB);
+        break;
+    case SDLK_p:
+        if (a->interface)
+            app_do(a, ACT_PARAMS_TAB);
         break;
     case SDLK_SPACE:
         app_do(a, ACT_PAUSE);
@@ -523,6 +558,12 @@ int app_main(int argc, char **argv)
             run_for = atof(argv[++i]);
         else if (strcmp(s, "--select") == 0 && i + 1 < argc)
             select_at_start = atoi(argv[++i]);
+        else if (strcmp(s, "--screen") == 0 && i + 1 < argc) {
+            const char *n = argv[++i];
+            a->screen = !strcmp(n, "library") ? SCREEN_LIBRARY
+                        : !strcmp(n, "parameters") || !strcmp(n, "params") ? SCREEN_PARAMS
+                                                                             : SCREEN_WORLD;
+        }
         else if (strcmp(s, "--camera") == 0 && i + 3 < argc) {
             cam[0] = atof(argv[++i]);
             cam[1] = atof(argv[++i]);
@@ -714,6 +755,7 @@ int app_main(int argc, char **argv)
             a->running = false;
         }
     }
+    library_free(&a->lib);
     if (a->interface)
         interface_shutdown();
     gl2d_shutdown();
