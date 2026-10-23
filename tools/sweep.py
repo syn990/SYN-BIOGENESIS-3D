@@ -103,7 +103,7 @@ def run_one(job):
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp")
     with open(tmp, "w") as f:
-        r = subprocess.run([str(BIN)] + [str(a) for a in args], stdout=f,
+        r = subprocess.run([str(BIN), "--headless"] + [str(a) for a in args], stdout=f,
                            stderr=subprocess.DEVNULL)
     if r.returncode != 0:
         tmp.unlink()

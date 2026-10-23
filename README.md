@@ -14,7 +14,8 @@ The difference is that they now live in a box rather than on a plane:
 A 0.9 being imports as it is and arrives flat; its descendants can learn
 depth by mutation.
 
-This is step 1 of three: the simulation, headless.
+Steps 1 and 2 of three are built: the simulation, and the window it runs
+in.
 - [docs/DESIGN.md](docs/DESIGN.md) has the plan, what is kept from 0.9 and
   every change with its reason.
 - [docs/sweep](docs/sweep/README.md) asks whether 0.9's life copes with the
@@ -28,29 +29,39 @@ This is step 1 of three: the simulation, headless.
 
 ## Build and run
 
-C11 and the C maths library; nothing else.
+C11, SDL2 and libepoxy (OpenGL 3.3); cglm comes in `third_party`.
+`make NO_WINDOW=1` builds the same program without a window, needing only
+the C maths library.
 
 ```sh
 make
-./syn-biogenesis-3d --seed 42 --frames 51200 --every 10
-./syn-biogenesis-3d --size 318 318 317 --import being.bgg --copies 10 --every 10
+./syn-biogenesis-3d                                   # the default world, 1000 x 1000 x 32
+./syn-biogenesis-3d --size 318 318 317 --seed 17 --warm 25
+./syn-biogenesis-3d --import being.bgg --copies 10    # a Biogenesis 0.9 being, arriving flat
+./syn-biogenesis-3d --headless --seed 42 --frames 51200 --every 10
 make test
 ```
 
-Until the renderer (step 2) exists, two stopgap tools draw the world on the
-CPU with the same software rasteriser (`tools/raster.c`):
+In the window, every segment is a lit capsule. Bites, infections and kills
+flash and bloom. The world keeps its own tick, and the picture is drawn
+between ticks, so motion stays smooth at any speed.
 
-```sh
-make tools/view && ./tools/view --size 318 318 317 --seed 17   # a live window (SDL2)
-tools/film.sh first-look.mp4 --size 318 318 317 --seed 17      # a video (ffmpeg)
-```
+| key or mouse | does |
+|---|---|
+| drag / right-drag / wheel | turn the camera / move it / zoom |
+| click | select an organism, and follow it |
+| space, `.` | pause, one frame while paused |
+| up, down | faster, slower (5 to 960 world frames a second, or as fast as it goes) |
+| `f` | follow the selection or the life, or stop |
+| `n`, `r`, home | next seed, restart, the whole box again |
+| esc | drop the selection, then quit |
 
-In the viewer:
-- drag to turn the camera, use the wheel to zoom;
-- space pauses, up/down change the speed;
-- `f` follows the life, `n` starts the next seed.
+The title bar shows the seed, the time, the living and the dead, kills, the
+speed, the frame rate and the selected organism. `--shot FILE.ppm` draws one
+picture and quits; `--help` lists everything.
 
-`--help` lists the options. The program prints a CSV row per report:
+`--headless` runs the world without a window. It prints a CSV row per
+report:
 - the air;
 - births, deaths, kills, infections and bites;
 - the living segment length by colour;
@@ -65,6 +76,10 @@ In the viewer:
 - checks that the optimised, unoptimised and (if installed) clang builds
   reach the same state from the same seed.
 
+`tools/film.sh OUT.mp4 [options]` films a world on the CPU, without a GPU.
+`make tools/view` builds the CPU window that came before the renderer, for
+machines without OpenGL 3.3.
+
 ## Credits
 
 The rules are Biogenesis's:
@@ -75,7 +90,9 @@ The rules are Biogenesis's:
 The code comes by way of [SYN-BIOGENESIS](https://github.com/syn990/SYN-BIOGENESIS),
 the C rewrite of 0.9. Each source file names what it was grown from.
 `src/sim/dmath.c` holds fdlibm's sine and cosine kernels, copyright (c) 1993
-Sun Microsystems, freely distributable with their notice. This project is
+Sun Microsystems, freely distributable with their notice. The window, shader
+loader and lighting pipeline come from SYN-TREK. cglm (`third_party/cglm`)
+is copyright (c) 2015 Recep Aslantas, under the MIT licence. This project is
 not affiliated with the Biogenesis authors.
 
 ## Licence

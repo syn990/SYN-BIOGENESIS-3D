@@ -78,6 +78,8 @@ int world_new_id(World *w);
 int world_n_corpses(const World *w);
 /* The energy held by every body, alive and dead. */
 double world_energy_in_bodies(const World *w);
+/* The middle of the living, or the box's centre when nothing lives. */
+V3 world_life_centre_or_box(const World *w);
 /* A 64-bit fingerprint of the whole state, for determinism checks. */
 uint64_t world_hash(const World *w);
 

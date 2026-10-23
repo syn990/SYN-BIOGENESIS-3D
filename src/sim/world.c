@@ -77,6 +77,18 @@ double world_energy_in_bodies(const World *w)
     return e;
 }
 
+V3 world_life_centre_or_box(const World *w)
+{
+    V3 sum = v3(0, 0, 0);
+    int n = 0;
+    for (int i = 0; i < w->norgs; i++)
+        if (w->orgs[i]->alive) {
+            sum = v3_add(sum, w->orgs[i]->pos);
+            n++;
+        }
+    return n ? v3_scale(sum, 1.0 / n) : v3(w->width / 2.0, w->height / 2.0, w->depth / 2.0);
+}
+
 /* ---- the air: 0.9's closed carbon cycle ---- */
 
 void world_add_o2(World *w, double q)
@@ -119,6 +131,10 @@ static void world_append(World *w, Organism *o)
 
 void world_add_organism(World *w, Organism *child, Organism *parent)
 {
+    /* a newborn began this frame where it was born (what a window draws
+     * it moving from) */
+    child->prev_pos = child->pos;
+    child->prev_q = child->q;
     world_append(w, child);
     if (parent)
         w->counts.births++;

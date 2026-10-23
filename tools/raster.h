@@ -46,7 +46,5 @@ void camera_orbit(Camera *c, V3 aim, double yaw_deg, double elevation_deg, doubl
                   int height);
 /* The world drawn into f; buf/cap is the caller's scratch. */
 void draw_world(Frame *f, const Camera *c, const World *w, Stroke **buf, int *cap);
-/* The middle of the living, or the box's centre if nothing lives. */
-V3 world_life_centre(const World *w);
 
 #endif

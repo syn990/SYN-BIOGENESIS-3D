@@ -201,14 +201,3 @@ void camera_orbit(Camera *c, V3 aim, double yaw_deg, double elevation_deg, doubl
     camera_look(c, eye, aim, 40, height);
 }
 
-V3 world_life_centre(const World *w)
-{
-    V3 sum = v3(0, 0, 0);
-    int n = 0;
-    for (int i = 0; i < w->norgs; i++)
-        if (w->orgs[i]->alive) {
-            sum = v3_add(sum, w->orgs[i]->pos);
-            n++;
-        }
-    return n ? v3_scale(sum, 1.0 / n) : v3(w->width / 2.0, w->height / 2.0, w->depth / 2.0);
-}

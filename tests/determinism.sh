@@ -6,15 +6,16 @@ set -e
 cd "$(dirname "$0")/.."
 bins="./syn-biogenesis-3d ./tests/syn-biogenesis-3d-O0"
 if command -v clang >/dev/null 2>&1; then
-    clang -std=c11 -D_DEFAULT_SOURCE -O2 -ffp-contract=off -Isrc -o tests/syn-biogenesis-3d-clang \
-        src/main.c src/sim/*.c src/io/*.c -lm
+    clang -std=c11 -D_DEFAULT_SOURCE -DSYN3D_NO_WINDOW -O2 -ffp-contract=off -Isrc \
+        -o tests/syn-biogenesis-3d-clang src/main.c src/headless.c src/options.c src/sim/*.c \
+        src/io/*.c -lm
     bins="$bins ./tests/syn-biogenesis-3d-clang"
 fi
 fail=0
 for args in "--size 1000 1000 4 --pitch 0" "--size 1000 1000 32" "--size 317 317 317 --pitch 100"; do
     ref=""
     for bin in $bins; do
-        h=$($bin --seed 5 --frames 6000 $args --hash 2>&1 >/dev/null | grep hash)
+        h=$($bin --headless --seed 5 --frames 6000 $args --hash 2>&1 >/dev/null | grep hash)
         if [ -z "$ref" ]; then
             ref=$h
         elif [ "$h" != "$ref" ]; then

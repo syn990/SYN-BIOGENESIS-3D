@@ -12,13 +12,30 @@ not), and the carbon and energy books balance on every frame.
    rigid-body physics, the determinism and bookkeeping tests, and the
    question the whole project rests on: does 0.9's life cope with a third
    dimension? See [the sweep](sweep/README.md).
-2. **The renderer, from SYN-TREK.** C11 with OpenGL 3.3 core (libepoxy),
-   cglm and SDL2, laid out as SYN-TREK is: `src/render/` is the only code
-   that calls GL and `src/sim/` never touches it. One addition SYN-TREK
-   doesn't have: instanced drawing. A crowded world has tens of thousands of
-   segments, so every capsule goes out in one `glDrawElementsInstanced`
-   call (two ends, a radius and a colour each). SYN-TREK's camera comes
-   across as it is.
+2. **The renderer, from SYN-TREK** (built). C11 with OpenGL 3.3 core
+   (libepoxy), cglm and SDL2, laid out as SYN-TREK is: `src/render/` and
+   `src/platform/` are the only code that calls GL or opens windows, and
+   `src/sim/` never touches either.
+   - **From SYN-TREK:**
+     - the window and its OpenGL 3.3 check;
+     - the shader loader;
+     - the lighting pipeline: an HDR scene buffer, bloom, ACES filmic
+       tonemapping and FXAA. It is cut down to what a world needs, without
+       the warp smear or the panels.
+   - **New:**
+     - instanced capsules: one `glDrawElementsInstanced` for every segment
+       of every organism, with two ends, a radius, a colour and a glow each.
+       Flashes glow past white, so bites, infections and kills bloom.
+     - an orbit camera. SYN-TREK's camera chases a ship, which is not what
+       a world needs.
+     - smooth motion: each organism is drawn between the pose it began the
+       world's last frame in and the one it ended it in.
+     - picking: a ray against every capsule.
+   - **Measured on Intel UHD 630:**
+     - 100 pictures a second for the cube at seed 17 (80 organisms, 1,315
+       segments);
+     - 76 a second for 1,259 organisms and 25,607 segments, while the world
+       runs 60 frames a second.
 3. **The SYN-OS interface**, drawn through SYN-TREK's GL interface layer
    (`ui/ui_render.c` there), because SYN-BIOGENESIS's shell is drawn with
    SDL_Renderer, which doesn't share a window with a GL context.

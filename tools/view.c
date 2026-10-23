@@ -125,7 +125,7 @@ int main(int argc, char **argv)
     bool slab = w.depth * 4 < (w.width < w.height ? w.width : w.height);
     bool follow = slab;
     double distance = slab ? 520 : 1.1 * v3_len(box), yaw = -60, elevation = slab ? 38 : 28;
-    V3 aim = follow ? world_life_centre(&w) : v3_scale(box, 0.5);
+    V3 aim = follow ? world_life_centre_or_box(&w) : v3_scale(box, 0.5);
     int speed = 2;
     bool paused = false, dragging = false, running = true;
     Stroke *buf = NULL;
@@ -195,7 +195,7 @@ int main(int argc, char **argv)
             tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING,
                                     width, height);
         }
-        V3 target = follow ? world_life_centre(&w) : v3_scale(box, 0.5);
+        V3 target = follow ? world_life_centre_or_box(&w) : v3_scale(box, 0.5);
         aim = v3_add(aim, v3_scale(v3_sub(target, aim), 0.05));
         Camera cam;
         camera_orbit(&cam, aim, yaw, elevation, distance, height);

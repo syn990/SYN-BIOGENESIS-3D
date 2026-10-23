@@ -150,7 +150,7 @@ int main(int argc, char **argv)
             for (int s = 0; s < steps; s++)
                 world_time(&w);
         if (follow && w.population > 0) {
-            V3 target = world_life_centre(&w);
+            V3 target = world_life_centre_or_box(&w);
             aim = k == 0 ? target : v3_add(aim, v3_scale(v3_sub(target, aim), 0.02));
         }
         Camera cam;
