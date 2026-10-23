@@ -6,3 +6,5 @@
 __pycache__/
 /tests/syn-biogenesis-3d-clang
 /runs-*/
+/tools/film
+/tools/view

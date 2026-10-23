@@ -31,6 +31,14 @@ obj/O0/%.o: src/%.c $(wildcard src/sim/*.h src/io/*.h)
 tests/syn-biogenesis-3d-O0: $(OBJ_O0) obj/O0/main.o
 	$(CC) $(CFLAGS) -O0 -o $@ $^ $(LDLIBS)
 
+# Until the real renderer exists: a camera that films the headless world
+# (tools/film.sh makes the video), and a live window onto it (needs SDL2).
+tools/film: tools/film.c tools/raster.c $(OBJ)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+
+tools/view: tools/view.c tools/raster.c $(OBJ)
+	$(CC) $(CFLAGS) $(shell pkg-config --cflags sdl2) -o $@ $^ $(shell pkg-config --libs sdl2) $(LDLIBS)
+
 tests/check: tests/check.c $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -39,6 +47,6 @@ test: syn-biogenesis-3d tests/check tests/syn-biogenesis-3d-O0
 	./tests/determinism.sh
 
 clean:
-	rm -rf obj syn-biogenesis-3d tests/check tests/syn-biogenesis-3d-O0 tests/syn-biogenesis-3d-clang
+	rm -rf obj syn-biogenesis-3d tools/film tools/view tests/check tests/syn-biogenesis-3d-O0 tests/syn-biogenesis-3d-clang
 
 .PHONY: all test clean

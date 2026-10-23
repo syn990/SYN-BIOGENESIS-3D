@@ -37,6 +37,19 @@ make
 make test
 ```
 
+Until the renderer (step 2) exists, two stopgap tools draw the world on the
+CPU with the same software rasteriser (`tools/raster.c`):
+
+```sh
+make tools/view && ./tools/view --size 318 318 317 --seed 17   # a live window (SDL2)
+tools/film.sh first-look.mp4 --size 318 318 317 --seed 17      # a video (ffmpeg)
+```
+
+In the viewer:
+- drag to turn the camera, use the wheel to zoom;
+- space pauses, up/down change the speed;
+- `f` follows the life, `n` starts the next seed.
+
 `--help` lists the options. The program prints a CSV row per report:
 - the air;
 - births, deaths, kills, infections and bites;
