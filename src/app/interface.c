@@ -251,7 +251,7 @@ static const char *const k_words[] = {
     "import", "speed", "pause", "go",      "step",   "theme",  "themes",    "follow",
     "home",  "select", "kill",  "genes",   "hints",  "clear",  "quit",      "colour",
     "guide", "kind",   "kinds", "set",     "params", "library", "keep",      "save",
-    "load",  "worlds",
+    "load",  "worlds", "goto",
 };
 
 static void print_line(const char *s)
@@ -269,7 +269,7 @@ static void help(void)
         "  import FILE [K]    a new world with K copies of a 0.9 being (.bgg)",
         "TIME",
         "  speed N|max        world frames a second          pause / go",
-        "  step [N]           N frames, paused",
+        "  step [N]           N frames, paused               goto T: run to time T, pause",
         "VIEW",
         "  follow / home      the camera                     theme [NAME] / themes",
         "  select ID / kill   an organism                    genes: the selected one's",
@@ -371,6 +371,13 @@ static void run(App *a, const char *entered)
             a->speed = best;
         }
         shell_print(SHELL_OUT, "speed %s", app_speed_text(a));
+    } else if (!strcasecmp(c, "goto") && argc > 1) {
+        long long t = atoll(argv[1]);
+        if (t * 256 <= a->w.frame)
+            shell_print(SHELL_ERROR, "time %lld is behind: worlds only go forward (restart, then goto)",
+                        t);
+        else
+            app_run_to(a, t * 256);
     } else if (!strcasecmp(c, "pause")) {
         a->paused = true;
     } else if (!strcasecmp(c, "go")) {
@@ -499,7 +506,10 @@ void interface_draw(App *a, int w, int h)
     double carbon = wd->o2 + wd->co2;
     mods[nm] = (ShellModule){a->paused ? ICON_PAUSE : ICON_PLAY, "", "Pause or go on (space); "
                              "up and down change the speed", a->paused ? 1 : 0, ACT_PAUSE};
-    snprintf(mods[nm++].text, sizeof mods[0].text, "%s", a->paused ? "PAUSED" : app_speed_text(a));
+    if (a->ff_target)
+        snprintf(mods[nm++].text, sizeof mods[0].text, "TO %lld", (long long)(a->ff_target / 256));
+    else
+        snprintf(mods[nm++].text, sizeof mods[0].text, "%s", a->paused ? "PAUSED" : app_speed_text(a));
     mods[nm] = (ShellModule){ICON_USERS, "", "The living", wd->population == 0 ? 2 : wd->population < 5 ? 1 : 0, 0};
     snprintf(mods[nm++].text, sizeof mods[0].text, "%d", wd->population);
     mods[nm] = (ShellModule){ICON_CLOCK, "", "Time: units of 256 world frames", 0, 0};

@@ -65,6 +65,7 @@
 #define ICON_CHART "\xef\x88\x81"
 #define ICON_TROPHY "\xef\x82\x91"
 #define ICON_SAVE "\xef\x83\x87"
+#define ICON_FORWARD "\xef\x81\x90"
 
 #define SHELL_BAR_H 44
 #define SHELL_HINTS_H 26

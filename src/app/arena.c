@@ -233,8 +233,9 @@ static void fight(App *a, Arena *ar)
         ar->worker[ar->nworkers++] = SDL_CreateThread(worker, "arena", ar);
 }
 
-/* the round, set up in the window: the very world it was scored in */
-static void watch(App *a, Arena *ar, int i)
+/* the round, set up in the window: the very world it was scored in, from
+ * its start, or run on to its end (where it was scored) */
+static void watch(App *a, Arena *ar, int i, bool to_end)
 {
     arena_shape_params(ar->fought_shape);
     a->wo.seed = ar->round[i].seed;
@@ -245,9 +246,12 @@ static void watch(App *a, Arena *ar, int i)
     a->warm = 0;
     if (app_make_world(a)) {
         app_do(a, ACT_HOME);
-        interface_note(a, false, "Round %d, from the start: %s and %s in the %s world "
-                       "(0.9's default parameters)", ar->round[i].seed, ar->name[0], ar->name[1],
-                       arena_shape_name(ar->fought_shape));
+        interface_note(a, false, "Round %d%s: %s and %s in the %s world "
+                       "(0.9's default parameters)", ar->round[i].seed,
+                       to_end ? ", run on to its end" : ", from the start", ar->name[0],
+                       ar->name[1], arena_shape_name(ar->fought_shape));
+        if (to_end)
+            app_run_to(a, (int64_t)ar->fought_units * 256);
         a->screen = SCREEN_WORLD;
     }
 }
@@ -415,7 +419,7 @@ void arena_screen(App *a, int w, int h)
         char s[32];
         snprintf(s, sizeof s, "seed %d", r.seed);
         mid(fo->mono_small, s, rr.x + 8, rr.y + rr.h * 0.5f, skin_tone(TONE_MUTED), ALIGN_LEFT);
-        float bx = rr.x + 78, bw = rr.w - 78 - 70;
+        float bx = rr.x + 78, bw = rr.w - 78 - 134;
         if (!r.done) {
             mid(fo->mono_small, (Uint32)(SDL_GetTicks() / 400) % 2 ? "..." : "..", bx, rr.y + rr.h * 0.5f,
                 skin_tone(TONE_MUTED), ALIGN_LEFT);
@@ -438,9 +442,12 @@ void arena_screen(App *a, int w, int h)
         snprintf(n, sizeof n, "%d:%d", r.line[0], r.line[1]);
         if (tot > 0)
             mid(fo->mono_small_bold, n, bx + 6, rr.y + rr.h * 0.5f, skin_tone(TONE_ON_ACCENT), ALIGN_LEFT);
-        if (!running && screen_button(ui_rect(rr.x + rr.w - 64, rr.y + 2, 60, rr.h - 4), ICON_EYE, "",
-                                      false, "Watch this round from the start"))
-            watch(a, ar, i);
+        if (!running && screen_button(ui_rect(rr.x + rr.w - 128, rr.y + 2, 60, rr.h - 4), ICON_EYE,
+                                      "", false, "Watch this round from the start"))
+            watch(a, ar, i, false);
+        if (!running && screen_button(ui_rect(rr.x + rr.w - 64, rr.y + 2, 60, rr.h - 4), ICON_FORWARD,
+                                      "", false, "Run this round on to its end, where it was scored"))
+            watch(a, ar, i, true);
     }
     /* the colours of the bars */
     float ky = in.y + 30;

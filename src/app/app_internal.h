@@ -84,6 +84,7 @@ typedef struct App {
     History hist;
     Arena *arena;
     char loaded[128]; /* the saved world it came from, "" for a seed's */
+    int64_t ff_target; /* a frame being run to as fast as it goes, then paused; 0 none */
     /* time */
     int speed;
     bool paused;
@@ -111,6 +112,9 @@ void app_do(App *a, int action);
 bool app_make_world(App *a);
 /* One world frame, and the history's sample when a time unit ends. */
 void app_step(App *a);
+/* Run the world flat out to frame (time units x 256) and pause there,
+ * drawing as it goes. */
+void app_run_to(App *a, int64_t frame);
 /* ~/.config/syn-biogenesis-3d/worlds/NAME.b3w (name: NULL for one made
  * from the seed and the time); false with err set. */
 bool app_save_world(App *a, const char *name, char *path, size_t pathlen, char *err, int errlen);

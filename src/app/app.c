@@ -86,6 +86,7 @@ bool app_make_world(App *a)
     }
     history_reset(&a->hist, &a->w);
     a->loaded[0] = 0;
+    a->ff_target = 0;
     for (long f = 0; f < (long)a->warm * 256; f++)
         app_step(a);
     a->selected = -1;
@@ -174,6 +175,12 @@ void app_list_worlds(void (*line)(const char *s))
     closedir(d);
     if (!n)
         line("(no saved worlds yet)");
+}
+
+void app_run_to(App *a, int64_t frame)
+{
+    a->ff_target = frame > a->w.frame ? frame : 0;
+    a->paused = false;
 }
 
 void app_step(App *a)
@@ -447,6 +454,7 @@ void app_do(App *a, int action)
     switch (action) {
     case ACT_PAUSE:
         a->paused = !a->paused;
+        a->ff_target = 0;
         break;
     case ACT_STEP:
         if (!a->paused)
@@ -556,6 +564,7 @@ static void usage(FILE *f)
           "  --screen NAME     start on a screen: world, library, parameters, statistics,\n"
           "                    arena\n"
           "  --load NAME       open a saved world (a name in the worlds folder, or a path)\n"
+          "  --goto T          run to time T as fast as it goes, and pause there\n"
           "  --arena A B       fight library beings A and B (names) in the arena\n"
           "  --seconds S       quit after S seconds and print the frame rate (with\n"
           "                    --shot, the picture is taken then)\n"
@@ -673,6 +682,7 @@ int app_main(int argc, char **argv)
     double run_for = 0;        /* --seconds: quit after this long and report the frame rate */
     const char *fight[2] = {NULL, NULL};
     const char *load = NULL;
+    long long goto_time = 0;
     for (int i = 1; i < argc; i++) {
         if (world_option(&a->wo, argc, argv, &i))
             continue;
@@ -685,6 +695,8 @@ int app_main(int argc, char **argv)
             run_for = atof(argv[++i]);
         else if (strcmp(s, "--load") == 0 && i + 1 < argc)
             load = argv[++i];
+        else if (strcmp(s, "--goto") == 0 && i + 1 < argc)
+            goto_time = atoll(argv[++i]);
         else if (strcmp(s, "--arena") == 0 && i + 2 < argc) {
             fight[0] = argv[++i];
             fight[1] = argv[++i];
@@ -769,6 +781,8 @@ int app_main(int argc, char **argv)
         interface_note(a, false, "Seed %lld: %d organisms in %d x %d x %d", (long long)a->wo.seed,
                        a->w.population, a->w.width, a->w.height, a->w.depth);
 
+    if (goto_time > 0)
+        app_run_to(a, goto_time * 256);
     if (fight[0] && !(a->interface && arena_start(a, fight[0], fight[1])))
         fprintf(stderr, "syn-biogenesis-3d: no such beings in the library: %s, %s\n", fight[0],
                 fight[1]);
@@ -845,7 +859,19 @@ int app_main(int argc, char **argv)
         a->seconds = (double)(now - start) / freq;
         if (dt > 0.25)
             dt = 0.25;
-        if (!a->paused) {
+        if (a->ff_target) {
+            /* running to a frame: as many as fit, then stop there */
+            Uint64 budget = now + freq / 60;
+            while (a->w.frame < a->ff_target && SDL_GetPerformanceCounter() < budget)
+                app_step(a);
+            a->alpha = 1;
+            if (a->w.frame >= a->ff_target) {
+                a->ff_target = 0;
+                a->paused = true;
+                interface_note(a, false, "Time %lld: %d alive (paused)",
+                               (long long)(a->w.frame / 256), a->w.population);
+            }
+        } else if (!a->paused) {
             int rate = k_speeds[a->speed];
             Uint64 budget = now + freq / 80; /* stop stepping after ~12 ms */
             if (rate) {
@@ -902,6 +928,8 @@ int app_main(int argc, char **argv)
             fprintf(stderr, "%ld pictures in %.1f s: %.1f fps, %d segments, %d organisms, time %lld\n",
                     frames_total, a->seconds, frames_total / a->seconds, a->ninst, a->w.norgs,
                     (long long)(a->w.frame / 256));
+            fprintf(stderr, "frame %lld, %d alive, hash %016llx\n", (long long)a->w.frame,
+                    a->w.population, (unsigned long long)world_hash(&a->w));
             a->running = false;
         }
     }

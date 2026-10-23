@@ -75,14 +75,15 @@ Over it is the SYN-OS interface, in the SYN-OS theme your desktop has on
 - **the arena** (`a`): two beings from the library fight round after round,
   each round a world of its own seed with ten of each and nothing else,
   run as child processes on every core but the window's. The one whose
-  line is alive at the end wins the round. Any round can be watched: the
-  window makes that very world, so what you see is the round that was
-  scored. `--arena NAME NAME` starts a fight from the command line;
+  line is alive at the end wins the round. Any round can be watched from
+  its start, or run on to its end, where it was scored. The window makes
+  that very world: replayed to its end, it has the round's own fingerprint.
+  `--arena NAME NAME` starts a fight from the command line;
 - **menus** (labwc's), from MENU or a right click;
 - **notifications** (mako's), and the key hints along the bottom;
 - **the console** (a drop-down foot, `` ` ``). It takes commands: `help`,
   `seed N`, `size W H D`, `pitch P`, `import FILE [K]`, `speed N`, `step N`,
-  `theme NAME`, `themes`, `select ID`, `genes`, `guide`, `colour NAME`,
+  `goto T`, `theme NAME`, `themes`, `select ID`, `genes`, `guide`, `colour NAME`,
   `kind`... `genes` lists the selected organism's genes, with how far
   each one bends. `guide` is SYN-BIOGENESIS's field guide to the colours,
   whose rules are 0.9's here too.
@@ -107,7 +108,8 @@ exactly as the one saved would have, frame for frame. Save with ctrl+`s`
 or `save [NAME]`; open with `load NAME`, or `--load NAME` on the command
 line, headless too (`--headless --load FILE --save FILE`).
 
-`--shot FILE.ppm` draws one picture and quits (with `--seconds S`, after S
+`--goto T` runs to time T as fast as it goes and pauses there. `--shot
+FILE.ppm` draws one picture and quits (with `--seconds S`, after S
 seconds). `SDL_VIDEODRIVER=offscreen` runs the window without showing it.
 `--help` lists everything.
 
