@@ -134,7 +134,7 @@ static void card(App *a, int w, int h)
                  o->parent_id);
     else
         snprintf(c.subtitle, sizeof c.subtitle, "a founder%s",
-                 o->gc->lineage == 1 ? ", imported" : "");
+                 o->gc->lineage >= 1 ? ", imported" : "");
     int max_age = o->gc->max_age + 1;
     struct {
         const char *label;
@@ -208,6 +208,8 @@ static void main_menu(App *a, float x, float y)
         {0, "SCREENS", NULL, NULL, false, false, NULL},
         {ACT_LIBRARY_TAB, "Library", "L", ICON_DNA, false, a->screen == SCREEN_LIBRARY, NULL},
         {ACT_PARAMS_TAB, "Parameters", "P", ICON_SLIDERS, false, a->screen == SCREEN_PARAMS, NULL},
+        {ACT_STATS_TAB, "Statistics", "S", ICON_CHART, false, a->screen == SCREEN_STATS, NULL},
+        {ACT_ARENA_TAB, "Arena", "A", ICON_TROPHY, false, a->screen == SCREEN_ARENA, NULL},
         {0, "VIEW", NULL, NULL, false, false, NULL},
         {ACT_FOLLOW, "Follow", "F", ICON_EYE, false, a->follow != FOLLOW_NONE, NULL},
         {ACT_HOME, "The whole box", "Home", ICON_HOUSE, false, false, NULL},
@@ -347,9 +349,7 @@ static void run(App *a, const char *entered)
         P.initial_co2 = strtod(argv[1], NULL);
         new_world(a);
     } else if (!strcasecmp(c, "import") && argc > 1) {
-        static char path[512];
-        snprintf(path, sizeof path, "%s", argv[1]);
-        a->wo.import = path;
+        world_options_import_only(&a->wo, argv[1]);
         a->wo.copies = argc > 2 ? atoi(argv[2]) : 10;
         new_world(a);
     } else if (!strcasecmp(c, "speed") && argc > 1) {
@@ -371,7 +371,7 @@ static void run(App *a, const char *entered)
         int k = argc > 1 ? atoi(argv[1]) : 1;
         a->paused = true;
         for (int i = 0; i < k; i++)
-            world_time(&a->w);
+            app_step(a);
         a->alpha = 1;
         shell_print(SHELL_OUT, "frame %lld", (long long)a->w.frame);
     } else if (!strcasecmp(c, "theme") && argc > 1) {
@@ -466,6 +466,8 @@ void interface_draw(App *a, int w, int h)
         {"WORLD", ICON_GLOBE, ACT_WORLD_TAB, a->screen == SCREEN_WORLD, false},
         {"LIBRARY", ICON_DNA, ACT_LIBRARY_TAB, a->screen == SCREEN_LIBRARY, false},
         {"PARAMETERS", ICON_SLIDERS, ACT_PARAMS_TAB, a->screen == SCREEN_PARAMS, false},
+        {"STATISTICS", ICON_CHART, ACT_STATS_TAB, a->screen == SCREEN_STATS, false},
+        {"ARENA", ICON_TROPHY, ACT_ARENA_TAB, a->screen == SCREEN_ARENA, false},
     };
     ShellModule mods[9];
     int nm = 0;
@@ -492,7 +494,7 @@ void interface_draw(App *a, int w, int h)
                              ACT_THEME_NEXT};
     snprintf(mods[nm++].text, sizeof mods[0].text, "%s", theme_short_name(skin_theme()));
 
-    int got = shell_bar(w, "SYN-BIOGENESIS-3D", tabs, 3, mods, nm, ACT_MENU);
+    int got = shell_bar(w, "SYN-BIOGENESIS-3D", tabs, 5, mods, nm, ACT_MENU);
     if (got == ACT_MENU)
         main_menu(a, (float)w - 10, SHELL_BAR_H + 4);
     else if (got)
@@ -508,6 +510,10 @@ void interface_draw(App *a, int w, int h)
             library_screen(a, w, h);
         else if (a->screen == SCREEN_PARAMS)
             params_screen(a, w, h);
+        else if (a->screen == SCREEN_STATS)
+            stats_screen(a, w, h);
+        else if (a->screen == SCREEN_ARENA)
+            arena_screen(a, w, h);
         else
             card(a, w, a->hints ? h : h + SHELL_HINTS_H);
     }

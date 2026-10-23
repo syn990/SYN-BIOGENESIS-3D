@@ -29,7 +29,7 @@
  *   up / down       faster / slower          f            follow / stop following
  *   n / r           next seed / restart      home         camera back to the box
  *   t / shift+t     next / previous theme    h            hide / show the key hints
- *   l / p           the library / the parameters
+ *   l / p / s / a   the library / the parameters / the statistics / the arena
  *   esc             drop the selection, then quit
  */
 
@@ -78,11 +78,18 @@ bool app_make_world(App *a)
         fprintf(stderr, "syn-biogenesis-3d: %s\n", err);
         return false;
     }
+    history_reset(&a->hist, &a->w);
     for (long f = 0; f < (long)a->warm * 256; f++)
-        world_time(&a->w);
+        app_step(a);
     a->selected = -1;
     a->acc = 0;
     return true;
+}
+
+void app_step(App *a)
+{
+    world_time(&a->w);
+    history_frame(&a->hist, &a->w);
 }
 
 Organism *app_find(const World *w, int id)
@@ -354,7 +361,7 @@ void app_do(App *a, int action)
     case ACT_STEP:
         if (!a->paused)
             a->paused = true;
-        world_time(&a->w);
+        app_step(a);
         a->alpha = 1;
         break;
     case ACT_FASTER:
@@ -417,6 +424,12 @@ void app_do(App *a, int action)
     case ACT_PARAMS_TAB:
         a->screen = a->screen == SCREEN_PARAMS ? SCREEN_WORLD : SCREEN_PARAMS;
         break;
+    case ACT_STATS_TAB:
+        a->screen = a->screen == SCREEN_STATS ? SCREEN_WORLD : SCREEN_STATS;
+        break;
+    case ACT_ARENA_TAB:
+        a->screen = a->screen == SCREEN_ARENA ? SCREEN_WORLD : SCREEN_ARENA;
+        break;
     case ACT_KEEP: {
         Organism *o = a->selected >= 0 ? app_find(&a->w, a->selected) : NULL;
         char path[1100], err[300];
@@ -442,14 +455,17 @@ static void usage(FILE *f)
           "  --camera Y P D    start the camera at yaw Y, pitch P degrees, distance D,\n"
           "                    aimed at the life\n"
           "  --select ID       start with organism ID selected (-1: the biggest living)\n"
-          "  --screen NAME     start on a screen: world, library or parameters\n"
-          "  --seconds S       quit after S seconds and print the frame rate\n"
+          "  --screen NAME     start on a screen: world, library, parameters, statistics,\n"
+          "                    arena\n"
+          "  --arena A B       fight library beings A and B (names) in the arena\n"
+          "  --seconds S       quit after S seconds and print the frame rate (with\n"
+          "                    --shot, the picture is taken then)\n"
           "  --window W H      window size (default 1440 900)\n"
           "\n"
           "  drag: turn   right-drag: move   wheel: zoom   click: select   right-click: menu\n"
           "  space: pause   .: one frame   up/down: speed   f: follow   `: console\n"
           "  n: next seed   r: restart   home: whole box   t: theme   h: key hints\n"
-          "  l: library   p: parameters\n"
+          "  l: library   p: parameters   s: statistics   a: arena\n"
           "  esc: drop the selection, then quit\n",
           f);
 }
@@ -495,6 +511,14 @@ static void handle_key(App *a, SDL_Keycode k, SDL_Keymod mods)
     case SDLK_p:
         if (a->interface)
             app_do(a, ACT_PARAMS_TAB);
+        break;
+    case SDLK_s:
+        if (a->interface)
+            app_do(a, ACT_STATS_TAB);
+        break;
+    case SDLK_a:
+        if (a->interface)
+            app_do(a, ACT_ARENA_TAB);
         break;
     case SDLK_SPACE:
         app_do(a, ACT_PAUSE);
@@ -546,6 +570,7 @@ int app_main(int argc, char **argv)
     int win_w = 1440, win_h = 900, select_at_start = -2;
     double cam[3] = {0, 0, 0}; /* yaw, pitch, distance from --camera; 0 distance keeps home */
     double run_for = 0;        /* --seconds: quit after this long and report the frame rate */
+    const char *fight[2] = {NULL, NULL};
     for (int i = 1; i < argc; i++) {
         if (world_option(&a->wo, argc, argv, &i))
             continue;
@@ -556,13 +581,19 @@ int app_main(int argc, char **argv)
             shot = argv[++i];
         else if (strcmp(s, "--seconds") == 0 && i + 1 < argc)
             run_for = atof(argv[++i]);
+        else if (strcmp(s, "--arena") == 0 && i + 2 < argc) {
+            fight[0] = argv[++i];
+            fight[1] = argv[++i];
+        }
         else if (strcmp(s, "--select") == 0 && i + 1 < argc)
             select_at_start = atoi(argv[++i]);
         else if (strcmp(s, "--screen") == 0 && i + 1 < argc) {
             const char *n = argv[++i];
-            a->screen = !strcmp(n, "library") ? SCREEN_LIBRARY
+            a->screen = !strcmp(n, "library")                             ? SCREEN_LIBRARY
                         : !strcmp(n, "parameters") || !strcmp(n, "params") ? SCREEN_PARAMS
-                                                                             : SCREEN_WORLD;
+                        : !strcmp(n, "statistics") || !strcmp(n, "stats")  ? SCREEN_STATS
+                        : !strcmp(n, "arena")                              ? SCREEN_ARENA
+                                                                           : SCREEN_WORLD;
         }
         else if (strcmp(s, "--camera") == 0 && i + 3 < argc) {
             cam[0] = atof(argv[++i]);
@@ -593,6 +624,7 @@ int app_main(int argc, char **argv)
     capsules_init();
     lines_init();
     gl2d_init();
+    a->arena = arena_new();
     const char *assets = find_assets();
     a->interface = assets && interface_init(a, assets);
     if (!a->interface)
@@ -625,7 +657,10 @@ int app_main(int argc, char **argv)
     interface_note(a, false, "Seed %lld: %d organisms in %d x %d x %d", (long long)a->wo.seed,
                    a->w.population, a->w.width, a->w.height, a->w.depth);
 
-    if (shot) {
+    if (fight[0] && !(a->interface && arena_start(a, fight[0], fight[1])))
+        fprintf(stderr, "syn-biogenesis-3d: no such beings in the library: %s, %s\n", fight[0],
+                fight[1]);
+    if (shot && run_for <= 0) {
         platform_window_refresh_size(&a->win);
         draw(a);
         bool ok = platform_window_shot(&a->win, shot);
@@ -704,7 +739,7 @@ int app_main(int argc, char **argv)
             if (rate) {
                 a->acc += dt * rate;
                 while (a->acc >= 1 && SDL_GetPerformanceCounter() < budget) {
-                    world_time(&a->w);
+                    app_step(a);
                     a->acc -= 1;
                 }
                 if (a->acc > 4)
@@ -712,7 +747,7 @@ int app_main(int argc, char **argv)
                 a->alpha = a->acc < 1 ? a->acc : 1;
             } else {
                 while (SDL_GetPerformanceCounter() < budget)
-                    world_time(&a->w);
+                    app_step(a);
                 a->alpha = 1;
             }
         }
@@ -738,6 +773,9 @@ int app_main(int argc, char **argv)
 
         platform_window_refresh_size(&a->win);
         draw(a);
+        if (shot && run_for > 0 && a->seconds >= run_for)
+            fprintf(stderr, platform_window_shot(&a->win, shot) ? "%s\n" : "could not write %s\n",
+                    shot);
         platform_window_swap(&a->win);
 
         frames_since++;
@@ -755,6 +793,7 @@ int app_main(int argc, char **argv)
             a->running = false;
         }
     }
+    arena_free(a->arena);
     library_free(&a->lib);
     if (a->interface)
         interface_shutdown();

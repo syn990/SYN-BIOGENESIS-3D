@@ -62,6 +62,8 @@
 #define ICON_BOLT "\xef\x83\xa7"
 #define ICON_SLIDERS "\xef\x87\x9e"
 #define ICON_BOOKMARK "\xef\x80\xae"
+#define ICON_CHART "\xef\x88\x81"
+#define ICON_TROPHY "\xef\x82\x91"
 
 #define SHELL_BAR_H 44
 #define SHELL_HINTS_H 26

@@ -64,6 +64,18 @@ not), and the carbon and energy books balance on every frame.
      shipped 0.9 jar's parser reads such files and ignores the bends.
    - **The parameters screen:** 0.9's tunables and the box's, grouped, with
      + and -; those that need a new world are marked.
+   - **The statistics screen** charts a history kept beside the world
+     (`src/app/history.c`), a sample per time unit. Past 2,048 samples,
+     neighbours are merged, so a run of any length reaches back to genesis.
+   - **The arena** (`src/app/arena.c`) fights two library beings. Each round
+     is this program run `--headless` as a child process (several at once,
+     on every core but the window's), with the two imported as lines 1 and
+     2. A round is won by the line still alive at its end.
+     - The window shares nothing with the rounds: they only read the
+       library's paths.
+     - Watching a round makes the same world in the window: the same seed,
+       options, parameters and code. What is shown is therefore the round
+       that was scored, by the determinism the tests check.
 
 Later: the arena, the telescope (the dice are the same java.util.Random,
 so every gene is still a place on its seed's stream), the being library and

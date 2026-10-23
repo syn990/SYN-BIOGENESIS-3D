@@ -19,12 +19,15 @@
 
 #include <stdbool.h>
 
+#include "app/arena.h"
+#include "app/history.h"
 #include "app/library.h"
 #include "options.h"
 #include "platform/window.h"
 #include "render/capsules.h"
 #include "render/lines.h"
 #include "sim/world.h"
+#include "ui/skin.h"
 
 typedef enum { FOLLOW_NONE, FOLLOW_LIFE, FOLLOW_SELECTED } Follow;
 
@@ -51,10 +54,12 @@ enum {
     ACT_WORLD_TAB,
     ACT_LIBRARY_TAB,
     ACT_PARAMS_TAB,
+    ACT_STATS_TAB,
+    ACT_ARENA_TAB,
     ACT_KEEP,
 };
 
-typedef enum { SCREEN_WORLD, SCREEN_LIBRARY, SCREEN_PARAMS } Screen;
+typedef enum { SCREEN_WORLD, SCREEN_LIBRARY, SCREEN_PARAMS, SCREEN_STATS, SCREEN_ARENA } Screen;
 
 /* world frames per second; the last is "as many as fit" */
 extern const int k_speeds[];
@@ -75,6 +80,8 @@ typedef struct App {
     int lib_folder, lib_sel;
     float lib_scroll;
     float params_scroll;
+    History hist;
+    Arena *arena;
     /* time */
     int speed;
     bool paused;
@@ -100,6 +107,8 @@ typedef struct App {
 
 void app_do(App *a, int action);
 bool app_make_world(App *a);
+/* One world frame, and the history's sample when a time unit ends. */
+void app_step(App *a);
 Organism *app_find(const World *w, int id);
 void app_draw_pose(const Organism *o, double alpha, V3 *pos, Quat *q);
 const char *app_speed_text(const App *a);
@@ -115,8 +124,13 @@ void interface_context_menu(App *a, float x, float y, int organism);
 void interface_note(App *a, bool urgent, const char *fmt, ...);
 
 /* screens.c: the screens under the bar, over the world */
+/* A screen's panel under the bar, with its title bar; returns its inside. */
+UIRect screen_panel(int w, int h, bool hints, const char *title, const char *subtitle);
+/* A button in the skin; true when clicked. */
+bool screen_button(UIRect b, const char *icon, const char *label, bool disabled, const char *tip);
 void library_screen(App *a, int w, int h);
 void params_screen(App *a, int w, int h);
+void stats_screen(App *a, int w, int h);
 /* The parameter called name (Params' field name), set from text: false if
  * there is none or the value is out of its range. */
 bool params_set_text(const char *name, const char *value, char *err, int errlen);

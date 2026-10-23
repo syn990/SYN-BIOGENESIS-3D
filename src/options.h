@@ -22,9 +22,14 @@
 
 #include "sim/world.h"
 
+#define MAX_IMPORTS 4
+
 typedef struct {
     int64_t seed;
-    const char *import; /* a 0.9 being (.bgg) to add */
+    /* beings (.bgg) to add after genesis, copies of each; the i-th one's
+     * descendants carry lineage mark i + 1 */
+    char import[MAX_IMPORTS][1024];
+    int nimports;
     int copies;
 } WorldOptions;
 
@@ -36,9 +41,9 @@ typedef struct {
     "  --pitch P         percent of new genes that bend out of their plane\n"                    \
     "                    (default 50; 0 keeps every new body flat, as in 0.9)\n"                 \
     "  --radius R        segment thickness: capsule radius (default 1)\n"                        \
-    "  --import FILE     add copies of a Biogenesis 0.9 being (.bgg), flat; its\n"               \
-    "                    living descendants are 'marked'\n"                                      \
-    "  --copies K        copies of the imported being (default 1)\n"
+    "  --import FILE     add copies of a Biogenesis 0.9 being (.bgg); up to 4, each\n"           \
+    "                    with its own line of descendants (CSV: marked, line2...)\n"            \
+    "  --copies K        copies of each imported being (default 1)\n"
 
 /* Sets the parameters' defaults and o's. */
 void world_options_init(WorldOptions *o);
@@ -47,8 +52,10 @@ void world_options_init(WorldOptions *o);
 bool world_option(WorldOptions *o, int argc, char **argv, int *i);
 /* Checks the parameters; on a problem writes it to err and returns false. */
 bool world_options_check(char *err, int errlen);
-/* Seeds the dice and makes the world: genesis, then the imports. Returns
- * the number of imported founders placed, or -1 with err set. */
+/* Seeds the dice and makes the world: genesis, then the imports, in
+ * order. Returns the number of imported founders placed, or -1 with err set. */
 int world_options_genesis(const WorldOptions *o, World *w, char *err, int errlen);
+/* The one being to import from now on (NULL: none). */
+void world_options_import_only(WorldOptions *o, const char *path);
 
 #endif

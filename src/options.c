@@ -25,7 +25,7 @@ void world_options_init(WorldOptions *o)
 {
     params_set_defaults(&P);
     o->seed = 1;
-    o->import = NULL;
+    o->nimports = 0;
     o->copies = 1;
 }
 
@@ -47,8 +47,11 @@ bool world_option(WorldOptions *o, int argc, char **argv, int *i)
         P.pitch_prob = atoi(argv[++*i]);
     else if (strcmp(a, "--radius") == 0 && more)
         P.segment_radius = strtod(argv[++*i], NULL);
-    else if (strcmp(a, "--import") == 0 && more)
-        o->import = argv[++*i];
+    else if (strcmp(a, "--import") == 0 && more) {
+        const char *path = argv[++*i];
+        if (o->nimports < MAX_IMPORTS)
+            snprintf(o->import[o->nimports++], sizeof o->import[0], "%s", path);
+    }
     else if (strcmp(a, "--copies") == 0 && more)
         o->copies = atoi(argv[++*i]);
     else
@@ -79,13 +82,21 @@ int world_options_genesis(const WorldOptions *o, World *w, char *err, int errlen
     world_free(w);
     world_init(w);
     world_genesis(w);
-    if (!o->import)
-        return 0;
-    GeneticCode *gc = bgg_load(o->import, err, errlen);
-    if (!gc)
-        return -1;
-    gc->lineage = 1;
-    int placed = world_add_founders(w, gc, o->copies);
-    gc_unref(gc);
+    int placed = 0;
+    for (int i = 0; i < o->nimports; i++) {
+        GeneticCode *gc = bgg_load(o->import[i], err, errlen);
+        if (!gc)
+            return -1;
+        gc->lineage = (uint32_t)(i + 1);
+        placed += world_add_founders(w, gc, o->copies);
+        gc_unref(gc);
+    }
     return placed;
+}
+
+void world_options_import_only(WorldOptions *o, const char *path)
+{
+    o->nimports = 0;
+    if (path)
+        snprintf(o->import[o->nimports++], sizeof o->import[0], "%s", path);
 }

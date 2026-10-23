@@ -68,7 +68,7 @@ static float wrap(TTF_Font *f, const char *text, float x, float y, float w, int 
 }
 
 /* The screen's panel under the bar, with a title bar; returns its inside. */
-static UIRect panel(int w, int h, bool hints, const char *title, const char *subtitle)
+UIRect screen_panel(int w, int h, bool hints, const char *title, const char *subtitle)
 {
     const Fonts *fo = shell_fonts();
     float top = SHELL_BAR_H + 12, bottom = (float)h - (hints ? SHELL_HINTS_H : 0) - 12;
@@ -84,7 +84,7 @@ static UIRect panel(int w, int h, bool hints, const char *title, const char *sub
     return ui_rect(r.x + 12, r.y + th + 12, r.w - 24, r.h - th - 24);
 }
 
-static bool button(UIRect b, const char *icon, const char *label, bool disabled, const char *tip)
+bool screen_button(UIRect b, const char *icon, const char *label, bool disabled, const char *tip)
 {
     const Fonts *fo = shell_fonts();
     bool hv = !disabled && uiin_over(b);
@@ -167,7 +167,7 @@ void library_screen(App *a, int w, int h)
         a->lib_sel = a->lib.folders[a->lib_folder].first;
     char sub[64];
     snprintf(sub, sizeof sub, "%d beings", a->lib.nbeings);
-    UIRect in = panel(w, h, a->hints, "LIBRARY", sub);
+    UIRect in = screen_panel(w, h, a->hints, "LIBRARY", sub);
     const Theme *t = skin_theme();
 
     /* the folders */
@@ -195,7 +195,7 @@ void library_screen(App *a, int w, int h)
     skin_text(fo->small, "Kept: this program's.", in.x, fy, TONE_MUTED, ALIGN_LEFT);
     skin_text(fo->small, "The rest: SYN-BIOGENESIS's", in.x, fy + 18, TONE_MUTED, ALIGN_LEFT);
     skin_text(fo->small, "0.9 beings, read as they are.", in.x, fy + 36, TONE_MUTED, ALIGN_LEFT);
-    if (button(ui_rect(in.x, in.y + in.h - 32, fw, 32), ICON_ROTATE, "Read again", false,
+    if (screen_button(ui_rect(in.x, in.y + in.h - 32, fw, 32), ICON_ROTATE, "Read again", false,
                "Read every folder again"))
         a->lib_read = false;
 
@@ -269,7 +269,7 @@ void library_screen(App *a, int w, int h)
     skin_text(fo->small, shape, dx, y, TONE_MUTED, ALIGN_LEFT);
 
     float bw = (dw - 8) / 2, by = in.y + in.h - 34;
-    if (button(ui_rect(dx, by, bw, 34), ICON_PLUS, "Into this world", false,
+    if (screen_button(ui_rect(dx, by, bw, 34), ICON_PLUS, "Into this world", false,
                "Ten of it, at random places in the running world")) {
         GeneticCode *gc = gc_ref(b->gc);
         int placed = world_add_founders(&a->w, gc, 10);
@@ -277,11 +277,9 @@ void library_screen(App *a, int w, int h)
         interface_note(a, false, "%d of %s put into the world", placed, b->name);
         a->screen = SCREEN_WORLD;
     }
-    if (button(ui_rect(dx + bw + 8, by, bw, 34), ICON_DICE, "New world with it", false,
+    if (screen_button(ui_rect(dx + bw + 8, by, bw, 34), ICON_DICE, "New world with it", false,
                "A new world from this seed, with ten of it among the founders")) {
-        static char path[1024];
-        snprintf(path, sizeof path, "%s", b->path);
-        a->wo.import = path;
+        world_options_import_only(&a->wo, b->path);
         a->wo.copies = 10;
         if (app_make_world(a)) {
             interface_note(a, false, "Seed %lld with ten of %s", (long long)a->wo.seed, b->name);
@@ -405,7 +403,7 @@ void params_print(void)
 void params_screen(App *a, int w, int h)
 {
     const Fonts *fo = shell_fonts();
-    UIRect in = panel(w, h, a->hints, "PARAMETERS", "0.9's, and the box's");
+    UIRect in = screen_panel(w, h, a->hints, "PARAMETERS", "0.9's, and the box's");
     float colw = fminf(420, (in.w - 20) / 2), row = 30;
     float bottom_bar = 44;
     /* two columns of groups, scrolled together if they don't fit */
@@ -444,9 +442,9 @@ void params_screen(App *a, int w, int h)
             param_text(d, v, sizeof v);
             float bx = r.x + r.w - 2 * 28 - 4;
             mid(fo->mono_small_bold, v, bx - 10, r.y + r.h * 0.5f, skin_tone(TONE_TEXT), ALIGN_RIGHT);
-            if (button(ui_rect(bx, r.y + 1, 26, r.h - 2), ICON_MINUS, "", false, NULL))
+            if (screen_button(ui_rect(bx, r.y + 1, 26, r.h - 2), ICON_MINUS, "", false, NULL))
                 param_put(d, param_get(d) - d->step);
-            if (button(ui_rect(bx + 28, r.y + 1, 26, r.h - 2), ICON_PLUS, "", false, NULL))
+            if (screen_button(ui_rect(bx + 28, r.y + 1, 26, r.h - 2), ICON_PLUS, "", false, NULL))
                 param_put(d, param_get(d) + d->step);
             if (uiin_over(ui_rect(r.x, r.y, r.w - 60, r.h))) {
                 static char tip[96];
@@ -464,7 +462,7 @@ void params_screen(App *a, int w, int h)
     skin_text(fo->small, "* takes a new world. The rest act on the running world at once.", in.x,
               by + 9, TONE_MUTED, ALIGN_LEFT);
     float bw = 190;
-    if (button(ui_rect(in.x + in.w - bw, by, bw, 34), ICON_DICE, "New world with these", false,
+    if (screen_button(ui_rect(in.x + in.w - bw, by, bw, 34), ICON_DICE, "New world with these", false,
                "A new world from this seed with these parameters")) {
         char err[300];
         if (!world_options_check(err, sizeof err)) {
@@ -477,7 +475,7 @@ void params_screen(App *a, int w, int h)
             a->screen = SCREEN_WORLD;
         }
     }
-    if (button(ui_rect(in.x + in.w - 2 * bw - 8, by, bw, 34), ICON_ROTATE, "Defaults", false,
+    if (screen_button(ui_rect(in.x + in.w - 2 * bw - 8, by, bw, 34), ICON_ROTATE, "Defaults", false,
                "Every parameter back to its default: 0.9's, and the box's (the world keeps going)"))
         params_set_defaults(&P);
 }

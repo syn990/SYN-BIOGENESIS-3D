@@ -42,13 +42,14 @@ static void usage(FILE *f)
 static void csv_header(void)
 {
     puts("time,frame,population,corpses,o2,co2,births,deaths,kills,infections,bites,"
-         "touches,eaten,green,red,cyan,blue,white,gray,yellow,flat,level,mean_segments,marked");
+         "touches,eaten,green,red,cyan,blue,white,gray,yellow,flat,level,mean_segments,marked,"
+         "line2,line3,line4");
 }
 
 static void csv_row(const World *w, const WorldCounts *last)
 {
     double len[COL_COUNT] = {0};
-    int flat = 0, marked = 0;
+    int flat = 0, line[5] = {0};
     double level = 0, genes = 0;
     for (int i = 0; i < w->norgs; i++) {
         const Organism *o = w->orgs[i];
@@ -59,18 +60,19 @@ static void csv_row(const World *w, const WorldCounts *last)
         flat += gc_is_flat(o->gc);
         level += org_levelness(o);
         genes += o->gc->ngenes * o->gc->symmetry;
-        marked += o->gc->lineage == 1;
+        if (o->gc->lineage >= 1 && o->gc->lineage <= 4)
+            line[o->gc->lineage]++;
     }
     int pop = w->population > 0 ? w->population : 1;
     const WorldCounts *c = &w->counts;
     printf("%" PRId64 ",%" PRId64 ",%d,%d,%.4f,%.4f,%" PRId64 ",%" PRId64 ",%" PRId64 ",%" PRId64
-           ",%" PRId64 ",%" PRId64 ",%.4f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.4f,%.2f,%d\n",
+           ",%" PRId64 ",%" PRId64 ",%.4f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.4f,%.2f,%d,%d,%d,%d\n",
            w->frame / FRAMES_PER_UNIT, w->frame, w->population, world_n_corpses(w), w->o2, w->co2,
            c->births - last->births, c->deaths - last->deaths, c->kills - last->kills,
            c->infections - last->infections, c->bites - last->bites, c->touches - last->touches,
            c->eaten - last->eaten, len[COL_GREEN], len[COL_RED], len[COL_CYAN], len[COL_BLUE],
            len[COL_WHITE], len[COL_GRAY], len[COL_YELLOW], (double)flat / pop, level / pop,
-           genes / pop, marked);
+           genes / pop, line[1], line[2], line[3], line[4]);
 }
 
 static bool check_books(const World *w, double carbon)

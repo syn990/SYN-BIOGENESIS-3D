@@ -65,6 +65,19 @@ Over it is the SYN-OS interface, in the SYN-OS theme your desktop has on
 - **the parameters** (`p`): all of 0.9's, and the box's, with + and -.
   Those marked * take a new world; the rest act at once. In the console,
   `params` and `set NAME VALUE`;
+- **the statistics** (`s`): the world's story since genesis, a sample a
+  time unit, charted:
+  - the living and the dead;
+  - the air;
+  - the bodies by colour;
+  - births, deaths, kills and infections;
+  - how many bodies stay flat and how level they lie;
+- **the arena** (`a`): two beings from the library fight round after round,
+  each round a world of its own seed with ten of each and nothing else,
+  run as child processes on every core but the window's. The one whose
+  line is alive at the end wins the round. Any round can be watched: the
+  window makes that very world, so what you see is the round that was
+  scored. `--arena NAME NAME` starts a fight from the command line;
 - **menus** (labwc's), from MENU or a right click;
 - **notifications** (mako's), and the key hints along the bottom;
 - **the console** (a drop-down foot, `` ` ``). It takes commands: `help`,
@@ -83,11 +96,13 @@ Over it is the SYN-OS interface, in the SYN-OS theme your desktop has on
 | `f`, `k` | follow the selection or the life, or stop; kill the selection |
 | `n`, `r`, home | next seed, restart, the whole box again |
 | `t`, shift+`t`, `h` | next theme, previous theme, hide the key hints |
-| `l`, `p` | the library, the parameters (esc: back to the world) |
+| `l`, `p`, `s`, `a` | the library, the parameters, the statistics, the arena (esc: back to the world) |
 | `` ` `` | the console |
 | esc | drop the selection, then quit |
 
-`--shot FILE.ppm` draws one picture and quits; `--help` lists everything.
+`--shot FILE.ppm` draws one picture and quits (with `--seconds S`, after S
+seconds). `SDL_VIDEODRIVER=offscreen` runs the window without showing it.
+`--help` lists everything.
 
 `--headless` runs the world without a window. It prints a CSV row per
 report:
@@ -95,7 +110,8 @@ report:
 - births, deaths, kills, infections and bites;
 - the living segment length by colour;
 - the share of flat codes and how level the bodies lie;
-- with `--import`, how many living descendants the imported being has.
+- with `--import` (up to four beings, each its own line), how many living
+  descendants each line has (`marked`, `line2`, `line3`, `line4`).
 
 `make test`:
 - checks the trigonometry, and that flat codes build 0.9's bodies exactly;
