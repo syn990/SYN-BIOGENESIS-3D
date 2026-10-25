@@ -16,12 +16,11 @@
 
 /* Opening and saving, as SYN-BIOGENESIS's SYN-OS does it: syn-crypter's
  * three columns (the folder above, this one with sizes and dates, and a
- * preview that draws a .bgg's being), the path as buttons, HOME and /, a
- * name to type, and keys: up and down pick, Enter opens, Backspace goes up
- * a folder, Esc cancels. */
+ * preview that draws a .bgg's being), the path as buttons, HOME and the
+ * root (on Windows the drive's), a name to type, and keys: up and down
+ * pick, Enter opens, Backspace goes up a folder, Esc cancels. */
 
 #include <dirent.h>
-#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,8 +30,10 @@
 #include <time.h>
 
 #include "app/app_internal.h"
+#include "compat.h"
 #include "io/bgg.h"
 #include "io/worldfile.h"
+#include "syn/library.h"
 #include "syn/sidecar.h"
 #include "ui/gl2d.h"
 #include "ui/input.h"
@@ -143,15 +144,51 @@ static void scan(Listing *l)
 
 static void set_dir(Listing *l, const char *path)
 {
-    char resolved[PATH_MAX];
+    char resolved[4096];
     snprintf(l->dir, sizeof l->dir, "%.4095s", realpath(path, resolved) ? resolved : path);
     scan(l);
 }
 
-static const char *home_dir(void)
+static const char *home_folder(void)
 {
-    const char *h = getenv("HOME");
+    const char *h = home_dir();
     return h && *h ? h : "/";
+}
+
+/* dir's root: "/", or on Windows its drive's, "C:/" */
+static void root_of(const char *dir, char *out, size_t n)
+{
+#ifdef _WIN32
+    if (dir[0] && dir[1] == ':') {
+        snprintf(out, n, "%c:/", dir[0]);
+        return;
+    }
+#else
+    (void)dir;
+#endif
+    snprintf(out, n, "/");
+}
+
+/* the folder dir is in, into out; false when dir is a root */
+static bool parent_of(const char *dir, char *out, size_t n)
+{
+    snprintf(out, n, "%s", dir);
+    char *slash = strrchr(out, '/');
+    if (!slash || !strcmp(out, "/"))
+        return false;
+#ifdef _WIN32
+    if (out[1] == ':' && slash == out + 2) {
+        if (!out[3])
+            return false; /* C:/ */
+        out[3] = '\0';
+        return true;
+    }
+#endif
+    if (slash == out)
+        out[1] = '\0';
+    else
+        *slash = '\0';
+    return true;
 }
 
 static bool is_dir(const char *p)
@@ -197,14 +234,14 @@ void files_open(App *a, int purpose)
         if (purpose == FILES_OPEN_WORLD || purpose == FILES_SAVE_WORLD || purpose == FILES_TELESCOPE_WORLD) {
             app_worlds_dir(dir, sizeof dir);
         } else if (purpose == FILES_SAVE_IMAGE) {
-            snprintf(dir, sizeof dir, "%s/Pictures", home_dir());
+            snprintf(dir, sizeof dir, "%s/Pictures", home_folder());
         } else {
             snprintf(dir, sizeof dir, "%s/beings", params_config_dir());
             if (!is_dir(dir))
-                snprintf(dir, sizeof dir, "%s/.config/syn-biogenesis/beings/0.9", home_dir());
+                snprintf(dir, sizeof dir, "%s", syn_library_theirs());
         }
         if (!is_dir(dir))
-            snprintf(dir, sizeof dir, "%s", home_dir());
+            snprintf(dir, sizeof dir, "%s", home_folder());
     }
     set_dir(&F.here, dir);
     F.scroll = 0;
@@ -308,7 +345,7 @@ static void accept(App *a)
     if (!F.name[0])
         return;
     char path[4400];
-    if (F.name[0] == '/')
+    if (path_absolute(F.name))
         snprintf(path, sizeof path, "%s", F.name);
     else
         snprintf(path, sizeof path, "%s%s%s", F.here.dir, F.here.dir[strlen(F.here.dir) - 1] == '/' ? "" : "/",
@@ -336,15 +373,8 @@ static void accept(App *a)
 static void up_dir(void)
 {
     char p[4096];
-    snprintf(p, sizeof p, "%s", F.here.dir);
-    char *slash = strrchr(p, '/');
-    if (!slash)
-        return;
-    if (slash == p)
-        p[1] = '\0';
-    else
-        *slash = '\0';
-    set_dir(&F.here, p);
+    if (parent_of(F.here.dir, p, sizeof p))
+        set_dir(&F.here, p);
 }
 
 static void human_size(long long n, char *out, size_t cap)
@@ -457,9 +487,11 @@ void files_screen(App *a, int w, int h)
 
     /* places, then the path a segment a button */
     float x = panel.x + 16, y = panel.y + tbh + 12, bh = 30;
+    char root[8];
+    root_of(d->dir, root, sizeof root);
     struct {
         const char *label, *path;
-    } places[] = {{"HOME", home_dir()}, {"/", "/"}};
+    } places[] = {{"HOME", home_folder()}, {root, root}};
     for (size_t i = 0; i < sizeof places / sizeof places[0]; i++) {
         float bw = skin_text_width(fo->small_bold, places[i].label) + 24;
         UIRect b = {x, y, bw, bh};
@@ -496,10 +528,17 @@ void files_screen(App *a, int w, int h)
                   last ? TONE_TEXT : hv ? TONE_ACCENT : TONE_MUTED, ALIGN_LEFT);
         if (hv && uiin_clicked(b)) {
             char p[4096] = "";
+            bool drive = false; /* on Windows the first is the drive, C:, with no / before */
+#ifdef _WIN32
+            drive = parts[0][0] && parts[0][1] == ':' && !parts[0][2];
+#endif
             for (int k = 0; k <= i; k++) {
-                strncat(p, "/", sizeof p - strlen(p) - 1);
+                if (k || !drive)
+                    strncat(p, "/", sizeof p - strlen(p) - 1);
                 strncat(p, parts[k], sizeof p - strlen(p) - 1);
             }
+            if (drive && i == 0)
+                strncat(p, "/", sizeof p - strlen(p) - 1);
             set_dir(d, p);
             break;
         }
@@ -523,15 +562,7 @@ void files_screen(App *a, int w, int h)
     skin_well(c2);
 
     char parent[4096];
-    snprintf(parent, sizeof parent, "%s", d->dir);
-    char *slash = strrchr(parent, '/');
-    bool has_parent = slash && strcmp(d->dir, "/") != 0;
-    if (has_parent) {
-        if (slash == parent)
-            parent[1] = '\0';
-        else
-            *slash = '\0';
-    }
+    bool has_parent = parent_of(d->dir, parent, sizeof parent);
     if (strcmp(F.parent_of, d->dir)) {
         snprintf(F.parent_of, sizeof F.parent_of, "%s", d->dir);
         snprintf(F.parent.ext, sizeof F.parent.ext, "%s", d->ext);

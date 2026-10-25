@@ -733,10 +733,8 @@ static int cmd_forge(int argc, char **argv)
     }
     if (scan < 1 || top < 1 || units < 1)
         return 2;
-    if (progress) {
+    if (progress)
         arena_os_child_begin();
-        setvbuf(stdout, NULL, _IOLBF, 0);
-    }
     params_for(defaults, w, h, dp, n);
     printf("@set 0 %d %d %d %d\n", P.world_width, P.world_height, P.world_depth, P.initial_organisms);
     Forged *fg = malloc((size_t)scan * sizeof *fg);

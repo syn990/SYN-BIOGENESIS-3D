@@ -61,6 +61,31 @@ static inline const char *config_home(void)
     return path_slashes(dir);
 }
 
+/* from the root: "/x", and on Windows "C:/x" */
+static inline bool path_absolute(const char *p)
+{
+#ifdef _WIN32
+    if (((p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= 'a' && p[0] <= 'z')) && p[1] == ':')
+        return true;
+#endif
+    return p[0] == '/';
+}
+
+/* the user's own folder: on Windows their profile (C:/Users/name), not the
+ * $HOME a Unix-like shell there may set */
+static inline const char *home_dir(void)
+{
+#ifdef _WIN32
+    static char home[1024];
+    const char *p = getenv("USERPROFILE");
+    if (p && *p) {
+        snprintf(home, sizeof home, "%s", p);
+        return path_slashes(home);
+    }
+#endif
+    return getenv("HOME");
+}
+
 #ifdef _WIN32
 #include <direct.h>
 
@@ -76,6 +101,11 @@ static inline int compat_mkdir(const char *path)
     return -1;
 }
 #define mkdir(path, mode) compat_mkdir(path)
+
+static inline char *realpath(const char *path, char *resolved)
+{
+    return _fullpath(resolved, path, 4096) ? path_slashes(resolved) : NULL;
+}
 
 static inline char *strsep(char **sp, const char *delim)
 {

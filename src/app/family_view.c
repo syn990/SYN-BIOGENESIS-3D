@@ -25,6 +25,7 @@
 #include <sys/stat.h>
 
 #include "app/app_internal.h"
+#include "compat.h"
 #include "io/bgg.h"
 #include "syn/family.h"
 #include "syn/history.h"
@@ -433,7 +434,7 @@ static void export_tree(App *a, const History *hi)
         if (dot && dot != name)
             *dot = '\0';
     } else {
-        const char *home = getenv("HOME");
+        const char *home = home_dir();
         snprintf(base, sizeof base, "%s", home && *home ? home : ".");
     }
     char dir[1400];

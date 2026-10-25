@@ -877,7 +877,6 @@ int syn_winner_main(int argc, char **argv)
     if (D.progress) {
         /* the window's: gone with it, every line as it is printed */
         arena_os_child_begin();
-        setvbuf(stdout, NULL, _IOLBF, 0);
     }
     if (D.units < 1)
         D.units = 1;

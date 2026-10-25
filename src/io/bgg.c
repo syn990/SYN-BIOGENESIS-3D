@@ -367,6 +367,25 @@ bool bgg_save(const char *path, const GeneticCode *gc, char *err, int errlen)
 
 uint8_t *bgg_bytes(const GeneticCode *gc, size_t *n)
 {
+#ifdef _WIN32
+    /* Windows has no open_memstream: through a temporary file, gone when
+     * it is closed (one each time, so threads never share one) */
+    FILE *t = tmpfile();
+    if (!t)
+        return NULL;
+    bgg_write(t, gc);
+    long end = ftell(t);
+    uint8_t *q = end > 0 ? malloc((size_t)end) : NULL;
+    rewind(t);
+    if (q && fread(q, 1, (size_t)end, t) != (size_t)end) {
+        free(q);
+        q = NULL;
+    }
+    fclose(t);
+    if (q)
+        *n = (size_t)end;
+    return q;
+#else
     char *p = NULL;
     size_t len = 0;
     FILE *f = open_memstream(&p, &len);
@@ -379,4 +398,5 @@ uint8_t *bgg_bytes(const GeneticCode *gc, size_t *n)
     }
     *n = len;
     return (uint8_t *)p;
+#endif
 }

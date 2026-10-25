@@ -37,6 +37,7 @@
 #include <sys/stat.h>
 
 #include "app/app_internal.h"
+#include "compat.h"
 #include "io/bgg.h"
 #include "io/worldfile.h"
 #include "sim/params.h"

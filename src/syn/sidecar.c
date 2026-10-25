@@ -21,6 +21,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "syn/family.h"
 #include "syn/history.h"
@@ -127,7 +130,11 @@ bool syn_sidecar_save(const World *w, const char *world_path)
         ok = fclose(f) == 0 && ok;
         /* in place at once, never half written (rename on Windows will not
          * replace a file) */
+#ifdef _WIN32
+        ok = ok && MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING);
+#else
         ok = ok && rename(tmp, path) == 0;
+#endif
         if (!ok)
             remove(tmp);
     } else {

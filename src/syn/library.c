@@ -454,6 +454,11 @@ bool syn_library_import(const char *path, const char *folder, char *got, size_t 
     if (!gc)
         return false;
     const char *base = strrchr(path, '/');
+#ifdef _WIN32
+    const char *bs = strrchr(path, '\\');
+    if (bs && (!base || bs > base))
+        base = bs;
+#endif
     char stem[LIB_NAME];
     snprintf(stem, sizeof stem, "%s", base ? base + 1 : path);
     size_t sl = strlen(stem);

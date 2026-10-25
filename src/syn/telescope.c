@@ -285,7 +285,6 @@ static void set_params(const FindSet *s, bool defaults)
 static void progress_on(void)
 {
     arena_os_child_begin();
-    setvbuf(stdout, NULL, _IOLBF, 0);
 }
 
 /* --- the seed of a saved world --- */

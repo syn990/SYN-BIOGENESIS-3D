@@ -758,13 +758,6 @@ Both are made again by tools, as the studies in `docs` are:
 
 ### Windows
 
-For now the Windows build stops with errors: the arena, telescope and
-winner search that came over from SYN-BIOGENESIS start their workers
-through `src/syn/arena_os.c`, which so far has only Linux's half, and
-`src/io/bgg.c` writes a code to memory with `open_memstream`, which MinGW
-lacks. Until those are ported, what follows describes the build as it
-was before they came.
-
 The same program builds on Windows 10 and 11 with
 [MSYS2](https://www.msys2.org), as SYN-BIOGENESIS does. In its UCRT64 shell:
 
