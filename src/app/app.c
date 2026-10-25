@@ -1219,10 +1219,11 @@ static void usage(FILE *f)
           "  --window W H      window size (default 1440 900)\n"
           "\n"
           "  drag: turn   right-drag: move   wheel: zoom   click: select   right-click: menu\n"
-          "  space: pause   .: one frame   up/down: speed   f: follow   `: console\n"
-          "  n: next seed   r: restart   home: whole box   t: theme   h: key hints\n"
-          "  l: library   p: parameters   s: statistics   a: arena   ctrl+s: save the world\n"
-          "  esc: drop the selection, then quit\n",
+          "  space: pause   .: one frame   up/down: speed   t: track   f: feed   k: kill\n"
+          "  g: its genes   l: next look   m: minimap   n: next seed   r: restart\n"
+          "  home: whole box   s: save the world   ctrl+o: open one   /: commands\n"
+          "  `: console   h: key hints   F11: fullscreen   ctrl+q: quit\n"
+          "  esc: drop the selection, then the main menu\n",
           f);
 }
 

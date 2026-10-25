@@ -39,7 +39,7 @@ typedef struct {
     "  --organisms N     random founders (default 30)\n"                                         \
     "  --co2 X           CO2 dissolved per million cubic units at genesis\n"                     \
     "                    (default 156.25, 0.9's 5000 in its floor 32 deep)\n"                    \
-    "  --light L         depth over which the light falls to 1/e (default 100;\n"               \
+    "  --light L         depth over which the light falls to 1/e (default 250;\n"               \
     "                    0: as bright at the floor as at the surface)\n"                         \
     "  --sight S         how far organisms sense each other (default 120)\n"                     \
     "  --pitch P         percent of new genes that bend out of their plane\n"                    \
