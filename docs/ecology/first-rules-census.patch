@@ -1,0 +1,116 @@
+diff -ru a/src/headless.c b/src/headless.c
+--- a/src/headless.c	2026-10-23 03:24:06.000000000 +0100
++++ b/src/headless.c	2026-10-24 12:48:41.486732577 +0100
+@@ -78,6 +78,21 @@
+            genes / pop, line[1], line[2], line[3], line[4]);
+ }
+ 
++static void census_rows(FILE *f, const World *w)
++{
++    for (int i = 0; i < w->norgs; i++) {
++        const Organism *o = w->orgs[i];
++        double len[COL_COUNT] = {0};
++        for (int k = 0; k < o->gc->ngenes; k++)
++            len[o->gc->genes[k].color] += o->gc->genes[k].length * o->gc->symmetry;
++        fprintf(f, "%" PRId64 ",%d,%d,%d,%d,%.1f,%.1f,%.1f,%.3f,%.2f,%.1f,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,0,0,0,0,0,0,%d,%d,%d\n",
++                w->frame / FRAMES_PER_UNIT, o->id, o->founder, o->generation, o->alive, o->pos.x, o->pos.y, o->pos.z,
++                org_levelness(o), o->energy, o->mass, o->gc->ngenes, o->gc->symmetry, gc_is_flat(o->gc),
++                len[COL_GREEN], len[COL_RED], len[COL_CYAN], len[COL_BLUE], len[COL_WHITE], len[COL_GRAY], len[COL_YELLOW],
++                o->total_children, o->total_kills, o->total_infected);
++    }
++}
++
+ static bool check_books(const World *w, double carbon)
+ {
+     double bodies = world_energy_in_bodies(w);
+@@ -99,7 +114,7 @@
+     int64_t frames = 25600;
+     int every = 0;
+     bool check = false, hash = false;
+-    const char *load = NULL, *save = NULL;
++    const char *load = NULL, *save = NULL, *cpath = NULL; FILE *census = NULL;
+     for (int i = 1; i < argc; i++) {
+         const char *a = argv[i];
+         bool more = i + 1 < argc;
+@@ -117,6 +132,8 @@
+             load = argv[++i];
+         else if (strcmp(a, "--save") == 0 && more)
+             save = argv[++i];
++        else if (strcmp(a, "--census") == 0 && more)
++            cpath = argv[++i];
+         else if (strcmp(a, "--help") == 0 || strcmp(a, "-h") == 0) {
+             usage(stdout);
+             return 0;
+@@ -151,11 +168,13 @@
+                 wo.seed, w.width, w.height, w.depth, w.population - imported, imported);
+     }
+ 
++    if (cpath) { census = fopen(cpath, "w"); fputs("time,id,founder,generation,alive,x,y,z,level,energy,mass,genes,symmetry,flat,green,red,cyan,blue,white,gray,yellow,light,carbon,plants,hunters,dead,crowd,children,kills,infected\n", census); }
+     double carbon = w.o2 + w.co2;
+     WorldCounts last = w.counts;
+     csv_header();
+     if (every > 0) {
+         csv_row(&w, &last);
++        if (census) census_rows(census, &w);
+         last = w.counts;
+     }
+     for (int64_t f = 0; f < frames; f++) {
+@@ -164,11 +183,15 @@
+             return 1;
+         if (every > 0 && w.frame % ((int64_t)every * FRAMES_PER_UNIT) == 0) {
+             csv_row(&w, &last);
++            if (census) census_rows(census, &w);
+             last = w.counts;
+         }
+     }
+-    if (every == 0 || w.frame % ((int64_t)every * FRAMES_PER_UNIT) != 0)
++    if (every == 0 || w.frame % ((int64_t)every * FRAMES_PER_UNIT) != 0) {
+         csv_row(&w, &last);
++        if (census) census_rows(census, &w);
++    }
++    if (census) fclose(census);
+     if (hash)
+         fprintf(stderr, "hash %016" PRIx64 "\n", world_hash(&w));
+     if (save && !worldfile_save(&w, save, err, sizeof err)) {
+diff -ru a/src/sim/organism.c b/src/sim/organism.c
+--- a/src/sim/organism.c	2026-10-23 03:24:06.000000000 +0100
++++ b/src/sim/organism.c	2026-10-24 12:48:41.486597969 +0100
+@@ -344,6 +344,7 @@
+     org_build_body(o);
+     if (!org_place_random(o))
+         return false;
++    o->founder = o->id;
+     o->energy = bio_min(P.initial_energy, w->co2);
+     world_decrease_co2(w, o->energy);
+     world_add_o2(w, o->energy);
+@@ -369,9 +370,11 @@
+     if (parent->infected_gc) {
+         inherit_gc = parent->infected_gc;
+         o->generation = parent->infected_generation + 1;
++        o->founder = parent->infected_founder;
+     } else {
+         inherit_gc = parent->gc;
+         o->generation = parent->generation + 1;
++        o->founder = parent->founder;
+     }
+     gc_assign(&o->gc, NULL);
+     o->gc = gc_new_mutated(inherit_gc);
+@@ -610,6 +613,7 @@
+ {
+     infector->total_infected++;
+     gc_assign(&o->infected_gc, infector->gc);
++    o->infected_founder = infector->founder;
+     o->infected_generation = infector->generation;
+     world_organism_has_been_infected(o->world, o, infector);
+ }
+diff -ru a/src/sim/organism.h b/src/sim/organism.h
+--- a/src/sim/organism.h	2026-10-23 03:24:06.000000000 +0100
++++ b/src/sim/organism.h	2026-10-24 12:48:41.485549545 +0100
+@@ -47,6 +47,7 @@
+     struct World *world;
+     int parent_id;
+     int id;
++    int founder, infected_founder;
+     int generation;
+     int infected_generation;
+     int total_children;

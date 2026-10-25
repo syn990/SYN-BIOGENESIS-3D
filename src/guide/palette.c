@@ -28,8 +28,8 @@ void syn_col_rgb(int slot, uint8_t *r, uint8_t *g, uint8_t *b)
 
 const char *syn_col_name(int slot)
 {
-    static const char *const names[COL_COUNT] = {"green", "red",  "cyan",   "blue",
-                                                 "white", "gray", "yellow", "brown"};
+    static const char *const names[COL_COUNT] = {"green", "red",    "cyan",   "blue", "white",
+                                                 "gray",  "yellow", "purple", "brown"};
     return slot >= 0 && slot < COL_COUNT ? names[slot] : "";
 }
 
@@ -43,6 +43,7 @@ Role syn_col_role(int slot)
     case COL_WHITE: return ROLE_INFECT;
     case COL_GRAY: return ROLE_KILL;
     case COL_YELLOW: return ROLE_REPRO;
+    case COL_PURPLE: return ROLE_PHOTO; /* a producer, as Color Mod files it */
     case COL_BROWN: return ROLE_DEAD;
     default: return ROLE_OTHER;
     }

@@ -1,5 +1,12 @@
 # Does 0.9's life cope with a third dimension?
 
+*This study measured the first rules: 0.9's, in a box, with nothing else
+changed. What it found (life coped only where the water was crowded, and
+plants owned the worlds) is why the rules now part from 0.9's: see [the
+water](../DESIGN.md#the-water) and [the ecology study](../ecology/README.md),
+which measures the rules as they are now. The runs below can only be made
+again with the build of that time (commit 93fd463).*
+
 **Yes, with one condition: the water must stay crowded.**
 
 - **Life survives in every shape**, from a slab one body thick to a cube.

@@ -34,15 +34,18 @@ WIN_RES = obj/win/syn-biogenesis-3d.res.o
 endif
 
 SIM = src/sim/dmath.c src/sim/jrandom.c src/sim/params.c src/sim/genetic_code.c \
-      src/sim/organism.c src/sim/world.c src/io/bgg.c src/io/worldfile.c
-CORE = src/options.c src/headless.c
+      src/sim/organism.c src/sim/world.c src/sim/stats.c src/io/bgg.c src/io/worldfile.c
+CORE = src/options.c src/headless.c src/guide/palette.c src/syn/family.c src/syn/record.c \
+       src/syn/round.c src/syn/arena.c src/syn/arena_os.c src/syn/history.c src/syn/sidecar.c \
+       src/syn/library.c src/syn/telescope.c src/syn/crack.c src/syn/winner.c
 WIN = src/app/app.c src/app/interface.c src/app/screens.c src/app/library.c \
-      src/app/history.c src/app/stats.c src/app/arena.c src/platform/window.c src/render/shader.c \
-      src/render/lighting.c src/render/capsules.c src/render/lines.c src/ui/gl2d.c \
-      src/ui/input.c src/ui/skin.c src/ui/theme.c src/ui/shell.c src/guide/palette.c \
+      src/app/stats.c src/app/family_view.c src/app/arena.c src/app/image.c src/app/files.c src/app/lab.c src/app/telescope.c src/app/looks.c src/app/minimap.c src/app/flesh.c src/io/png.c \
+      src/platform/window.c src/render/shader.c \
+      src/render/lighting.c src/render/bodies.c src/render/water.c src/render/lines.c src/ui/gl2d.c \
+      src/ui/input.c src/ui/skin.c src/ui/theme.c src/ui/shell.c \
       src/guide/kind.c src/guide/lexicon.c src/guide/guide.c
 HEADERS = $(wildcard src/*.h src/sim/*.h src/io/*.h src/app/*.h src/render/*.h src/platform/*.h \
-          src/ui/*.h src/guide/*.h)
+          src/ui/*.h src/guide/*.h src/syn/*.h)
 
 OBJ_SIM = $(SIM:src/%.c=obj/%.o)
 OBJ_CORE = $(CORE:src/%.c=obj/%.o)
@@ -93,13 +96,32 @@ tests/syn-biogenesis-3d-O0$(EXE): $(OBJ_O0)
 tests/check$(EXE): tests/check.c $(OBJ_SIM)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
-test: syn-biogenesis-3d$(EXE) tests/check$(EXE) tests/syn-biogenesis-3d-O0$(EXE)
+OBJ_SYN = $(filter obj/syn/%.o obj/guide/palette.o,$(OBJ_CORE))
+
+tests/arena_check$(EXE): tests/arena_check.c $(OBJ_SIM) $(OBJ_SYN)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+
+tests/syn_check$(EXE): tests/syn_check.c $(OBJ_SIM) $(OBJ_SYN)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+
+tests/telescope_check$(EXE): tests/telescope_check.c $(OBJ_SIM) $(OBJ_SYN)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+
+test: syn-biogenesis-3d$(EXE) tests/check$(EXE) tests/syn-biogenesis-3d-O0$(EXE) tests/arena_check$(EXE) \
+		tests/syn_check$(EXE) tests/telescope_check$(EXE)
 	./tests/check
+	./tests/syn_check
+	./tests/telescope_check
 	./tests/determinism.sh
+	./tests/arena.sh
 
 # Stopgaps from before the window existed, drawn on the CPU: a camera that
 # films the headless world (tools/film.sh makes the video) and a window.
 tools/film$(EXE): tools/film.c tools/raster.c $(OBJ_SIM)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+
+# The data the telescope's fitness is fitted on (docs/crack).
+tools/founders$(EXE): tools/founders.c $(OBJ_SIM)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
 tools/view$(EXE): tools/view.c tools/raster.c $(OBJ_SIM)
@@ -116,7 +138,8 @@ dist: syn-biogenesis-3d$(EXE)
 	$(STRIP) -o dist/syn-biogenesis-3d/syn-biogenesis-3d$(EXE) syn-biogenesis-3d$(EXE)
 
 clean:
-	rm -rf obj dist syn-biogenesis-3d$(EXE) tools/film$(EXE) tools/view$(EXE) tests/check$(EXE) \
-		tests/syn-biogenesis-3d-O0$(EXE) tests/syn-biogenesis-3d-clang$(EXE)
+	rm -rf obj dist syn-biogenesis-3d$(EXE) tools/film$(EXE) tools/view$(EXE) tools/founders$(EXE) \
+		tests/check$(EXE) tests/syn-biogenesis-3d-O0$(EXE) tests/syn-biogenesis-3d-clang$(EXE) \
+		tests/arena_check$(EXE) tests/syn_check$(EXE) tests/telescope_check$(EXE)
 
 .PHONY: all test dist clean

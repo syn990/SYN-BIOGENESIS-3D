@@ -164,3 +164,61 @@ double d_cos(double x)
         return k_sin(y[0], y[1], 1);
     }
 }
+
+/* __ieee754_exp: e^x, for the light falling off with depth. */
+double d_exp(double x)
+{
+    static const double halF[2] = {0.5, -0.5}, twom1000 = 9.33263618503218878990e-302,
+                        o_threshold = 7.09782712893383973096e+02,
+                        u_threshold = -7.45133219101941108420e+02,
+                        ln2HI[2] = {6.93147180369123816490e-01, -6.93147180369123816490e-01},
+                        ln2LO[2] = {1.90821492927058770002e-10, -1.90821492927058770002e-10},
+                        invln2 = 1.44269504088896338700e+00, P1 = 1.66666666666666019037e-01,
+                        P2 = -2.77777777770155933842e-03, P3 = 6.61375632143793436117e-05,
+                        P4 = -1.65339022054652515390e-06, P5 = 4.13813679705723846039e-08;
+    int32_t hx = hi_word(x);
+    int xsb = (int)((uint32_t)hx >> 31);
+    hx &= 0x7fffffff;
+    if (hx >= 0x40862E42) {
+        if (x != x)
+            return x + x;
+        if (hx >= 0x7ff00000)
+            return xsb == 0 ? x : 0.0;
+        if (x > o_threshold)
+            return HUGE_VAL;
+        if (x < u_threshold)
+            return 0.0;
+    }
+    double hi = 0, lo = 0;
+    int k = 0;
+    if (hx > 0x3fd62e42) {
+        if (hx < 0x3FF0A2B2) {
+            hi = x - ln2HI[xsb];
+            lo = ln2LO[xsb];
+            k = 1 - xsb - xsb;
+        } else {
+            k = (int)(invln2 * x + halF[xsb]);
+            double t = k;
+            hi = x - t * ln2HI[0];
+            lo = t * ln2LO[0];
+        }
+        x = hi - lo;
+    } else if (hx < 0x3e300000) {
+        return 1.0 + x;
+    }
+    double t = x * x;
+    double c = x - t * (P1 + t * (P2 + t * (P3 + t * (P4 + t * P5))));
+    if (k == 0)
+        return 1.0 - ((x * c) / (c - 2.0) - x);
+    double y = 1.0 - ((lo - (x * c) / (2.0 - c)) - hi);
+    uint64_t b;
+    memcpy(&b, &y, sizeof b);
+    if (k >= -1021) {
+        b += (uint64_t)(int64_t)k << 52;
+        memcpy(&y, &b, sizeof y);
+        return y;
+    }
+    b += (uint64_t)(int64_t)(k + 1000) << 52;
+    memcpy(&y, &b, sizeof y);
+    return y * twom1000;
+}

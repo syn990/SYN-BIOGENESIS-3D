@@ -45,14 +45,15 @@ static struct {
     int theme;
 
     struct {
-        char text[200];
+        char text[400];
         bool urgent;
         Uint32 at;
     } note[NOTES];
     int nnote;
 
     bool console;
-    bool console_used; /* opened at least once: only then does closing slide */
+    bool console_fresh; /* opened this frame: the key that opened it is not one to close it */
+    bool console_used;  /* opened at least once: only then does closing slide */
     Uint32 console_at;
     float console_h;
     char line[256];
@@ -63,6 +64,19 @@ static struct {
     char hist[HISTORY][256];
     int nhist, hpos;
     char entered[256];
+
+    /* the field being typed in (shell_field), and the one to be next */
+    const void *field, *field_want;
+    bool field_seen, field_fresh, field_next;
+    char field_line[64], field_want_text[64];
+    int field_cur;
+
+    /* the command list: the line typed, the pick, the first row shown */
+    bool launcher;
+    bool launcher_fresh; /* opened this frame: the key that opened it is not typed in it */
+    char query[64];
+    int qcur, sel, first;
+    float launcher_mx, launcher_my; /* where the pointer was: it picks only once it moves */
 
     bool menu;
     float mx, my;
@@ -96,6 +110,13 @@ static const char *settings_path(void)
     return path;
 }
 
+/* the window's other choices, kept with the theme: "key=value" lines */
+#define SETTINGS 16
+static struct {
+    char key[32], value[96];
+} g_set[SETTINGS];
+static int g_nset;
+
 static void save_settings(void)
 {
     const char *path = settings_path();
@@ -114,7 +135,32 @@ static void save_settings(void)
     if (!f)
         return;
     fprintf(f, "theme=%s\n", SH.themes.items[SH.theme].name);
+    for (int i = 0; i < g_nset; i++)
+        fprintf(f, "%s=%s\n", g_set[i].key, g_set[i].value);
     fclose(f);
+}
+
+const char *shell_setting(const char *key)
+{
+    for (int i = 0; i < g_nset; i++)
+        if (!strcmp(g_set[i].key, key))
+            return g_set[i].value;
+    return NULL;
+}
+
+void shell_setting_set(const char *key, const char *value)
+{
+    int i = 0;
+    while (i < g_nset && strcmp(g_set[i].key, key))
+        i++;
+    if (i == g_nset) {
+        if (g_nset == SETTINGS)
+            return;
+        g_nset++;
+        snprintf(g_set[i].key, sizeof g_set[i].key, "%s", key);
+    }
+    snprintf(g_set[i].value, sizeof g_set[i].value, "%s", value);
+    save_settings();
 }
 
 bool shell_init(const char *assets)
@@ -145,8 +191,15 @@ bool shell_init(const char *assets)
         char line[200];
         while (fgets(line, sizeof line, f)) {
             line[strcspn(line, "\r\n")] = 0;
+            char *eq = strchr(line, '=');
             if (!strncmp(line, "theme=", 6))
                 snprintf(want, sizeof want, "%.150s", line + 6);
+            else if (eq && g_nset < SETTINGS) {
+                *eq = 0;
+                snprintf(g_set[g_nset].key, sizeof g_set[0].key, "%.31s", line);
+                snprintf(g_set[g_nset].value, sizeof g_set[0].value, "%.95s", eq + 1);
+                g_nset++;
+            }
         }
         fclose(f);
     }
@@ -204,6 +257,30 @@ void shell_theme_step(int by)
     save_settings();
 }
 
+int shell_theme_count(void)
+{
+    return SH.themes.count;
+}
+
+const Theme *shell_theme_at(int i)
+{
+    return i >= 0 && i < SH.themes.count ? &SH.themes.items[i] : NULL;
+}
+
+int shell_theme_index(void)
+{
+    return SH.theme;
+}
+
+void shell_theme_pick(int i)
+{
+    if (i < 0 || i >= SH.themes.count)
+        return;
+    SH.theme = i;
+    skin_set_theme(&SH.themes.items[i]);
+    save_settings();
+}
+
 void shell_theme_list(void)
 {
     char line[LOG_LEN] = "";
@@ -227,8 +304,13 @@ void shell_begin(int w, int h)
     gl2d_begin(w, h);
 }
 
+static void field_frame_end(void);
+
 void shell_end(int w, int h)
 {
+    field_frame_end();
+    SH.console_fresh = false;
+    SH.launcher_fresh = false;
     uiin_draw_tooltip(&SH.fonts, w, h);
     gl2d_end();
     skin_end_frame();
@@ -287,13 +369,15 @@ int shell_bar(int w, const char *name, const ShellTab *tabs, int ntabs, const Sh
 
     float x = 10;
     UIRect mark = {x, pad, show_name ? mark_w : 34, bh};
+    if (uiin_over(mark))
+        skin_fill(mark, skin_theme()->panel_hover, 0.6f);
     skin_glyph(x + 15, cy + 1, 17, fo->icon);
     if (show_name)
         mid(fo->heading, name, x + 30, cy, skin_tone(TONE_ACCENT), ALIGN_LEFT);
     if (uiin_over(mark)) {
-        uiin_tooltip("The console   ( ` )");
+        uiin_tooltip("Every command   ( / )");
         if (uiin_clicked(mark))
-            shell_console_toggle();
+            shell_launcher_open();
     }
     x += mark.w + 12;
 
@@ -384,7 +468,7 @@ void shell_hints(int w, int h, const char *const *keys, int nkeys, const char *r
 
 void shell_notify(bool urgent, const char *fmt, ...)
 {
-    char text[200];
+    char text[400];
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(text, sizeof text, fmt, ap);
@@ -428,7 +512,7 @@ void shell_notifications(int w, int top)
         uiin_solid(r);
         skin_set_alpha(a);
         skin_note(r, SH.note[i].urgent);
-        char fit[200];
+        char fit[400];
         ink(fo->mono_small, skin_fit(fo->mono_small, s, tw, fit, sizeof fit), r.x + 16, r.y + 13,
             skin_tone(TONE_TEXT), ALIGN_LEFT);
         skin_set_alpha(1);
@@ -446,7 +530,11 @@ void shell_notifications(int w, int top)
 int shell_card(int w, int h, const ShellCard *c)
 {
     const Fonts *fo = &SH.fonts;
-    float cw = (float)(w - 32 < 760 ? w - 32 : 760), ch = 236;
+    /* as wide as its buttons need, within the window */
+    float need = 20;
+    for (int i = 0; i < c->nactions; i++)
+        need += 46 + text_w(fo->small_bold, c->actions[i].label);
+    float cw = fminf((float)w - 32, fmaxf(760, need)), ch = 236;
     UIRect r = {16, (float)(h - SHELL_HINTS_H - 12) - ch, cw, ch};
     int got = 0;
     uiin_solid(r);
@@ -664,6 +752,7 @@ int shell_menu(int w, int h)
 void shell_console_toggle(void)
 {
     SH.console = !SH.console;
+    SH.console_fresh = SH.console;
     SH.console_used = true;
     SH.console_at = SDL_GetTicks();
     SH.scroll = 0;
@@ -794,49 +883,53 @@ static void complete(const char *const *words, int nwords)
     SH.lcur = (int)strlen(SH.line);
 }
 
-/* The keys of a line being typed: SDL's text in at the cursor, and the
- * editing keys. */
-static void edit_line(void)
+/* The keys of a line being typed: SDL's text in at the cursor (but skip),
+ * and the editing keys. */
+static void edit_text(char *line, size_t cap, int *cur, char skip)
 {
     const char *typed = uiin_typed();
     for (const char *p = typed; *p; p++) {
-        if (*p == '`')
-            continue; /* the key that closes the console */
-        size_t len = strlen(SH.line);
-        if (len + 1 >= sizeof SH.line)
+        if (*p == skip)
+            continue;
+        size_t len = strlen(line);
+        if (len + 1 >= cap)
             break;
-        memmove(SH.line + SH.lcur + 1, SH.line + SH.lcur, len - (size_t)SH.lcur + 1);
-        SH.line[SH.lcur++] = *p;
+        memmove(line + *cur + 1, line + *cur, len - (size_t)*cur + 1);
+        line[(*cur)++] = *p;
     }
-    size_t len = strlen(SH.line);
-    if (uiin_key(SDLK_BACKSPACE) && SH.lcur > 0) {
-        int from = SH.lcur - 1;
-        while (from > 0 && ((unsigned char)SH.line[from] & 0xC0) == 0x80)
+    size_t len = strlen(line);
+    if (uiin_key(SDLK_BACKSPACE) && *cur > 0) {
+        int from = *cur - 1;
+        while (from > 0 && ((unsigned char)line[from] & 0xC0) == 0x80)
             from--;
-        memmove(SH.line + from, SH.line + SH.lcur, len - (size_t)SH.lcur + 1);
-        SH.lcur = from;
+        memmove(line + from, line + *cur, len - (size_t)*cur + 1);
+        *cur = from;
     }
-    if (uiin_key(SDLK_DELETE) && (size_t)SH.lcur < len) {
-        int to = SH.lcur + 1;
-        while ((size_t)to < len && ((unsigned char)SH.line[to] & 0xC0) == 0x80)
+    if (uiin_key(SDLK_DELETE) && (size_t)*cur < len) {
+        int to = *cur + 1;
+        while ((size_t)to < len && ((unsigned char)line[to] & 0xC0) == 0x80)
             to++;
-        memmove(SH.line + SH.lcur, SH.line + to, len - (size_t)to + 1);
+        memmove(line + *cur, line + to, len - (size_t)to + 1);
     }
-    if (uiin_key(SDLK_LEFT) && SH.lcur > 0) {
-        SH.lcur--;
-        while (SH.lcur > 0 && ((unsigned char)SH.line[SH.lcur] & 0xC0) == 0x80)
-            SH.lcur--;
+    if (uiin_key(SDLK_LEFT) && *cur > 0) {
+        (*cur)--;
+        while (*cur > 0 && ((unsigned char)line[*cur] & 0xC0) == 0x80)
+            (*cur)--;
     }
-    if (uiin_key(SDLK_RIGHT) && (size_t)SH.lcur < strlen(SH.line)) {
-        SH.lcur++;
-        while ((size_t)SH.lcur < strlen(SH.line) &&
-               ((unsigned char)SH.line[SH.lcur] & 0xC0) == 0x80)
-            SH.lcur++;
+    if (uiin_key(SDLK_RIGHT) && (size_t)*cur < strlen(line)) {
+        (*cur)++;
+        while ((size_t)*cur < strlen(line) && ((unsigned char)line[*cur] & 0xC0) == 0x80)
+            (*cur)++;
     }
     if (uiin_key(SDLK_HOME))
-        SH.lcur = 0;
+        *cur = 0;
     if (uiin_key(SDLK_END))
-        SH.lcur = (int)strlen(SH.line);
+        *cur = (int)strlen(line);
+}
+
+static void edit_line(void)
+{
+    edit_text(SH.line, sizeof SH.line, &SH.lcur, '`'); /* the key that closes the console */
 }
 
 const char *shell_console(int w, int top, int h, const char *const *words, int nwords)
@@ -870,7 +963,7 @@ const char *shell_console(int w, int top, int h, const char *const *words, int n
 
     if (SH.console) {
         int page = (int)(ch / lh) - 3;
-        if (uiin_key(SDLK_BACKQUOTE) || uiin_key(SDLK_ESCAPE)) {
+        if (!SH.console_fresh && (uiin_key(SDLK_BACKQUOTE) || uiin_key(SDLK_ESCAPE))) {
             shell_console_toggle();
         } else if (uiin_key(SDLK_RETURN) || uiin_key(SDLK_KP_ENTER)) {
             snprintf(SH.entered, sizeof SH.entered, "%s", SH.line);
@@ -970,4 +1063,436 @@ const char *shell_console(int w, int top, int h, const char *const *words, int n
     if (SH.scroll > 0 && skip > 0)
         SH.scroll -= skip;
     return ret;
+}
+
+/* ---- fields ---- */
+
+static void field_stop(void)
+{
+    SH.field = NULL;
+    uiin_set_typing(SH.console);
+}
+
+/* Between frames: the field asked for (by a click, or Tab from the one
+ * before it) takes the keyboard, and one no longer drawn lets it go. */
+static void field_frame_end(void)
+{
+    if (SH.field_want) {
+        SH.field = SH.field_want;
+        snprintf(SH.field_line, sizeof SH.field_line, "%s", SH.field_want_text);
+        SH.field_cur = (int)strlen(SH.field_line);
+        SH.field_fresh = true;
+        uiin_set_typing(true);
+    } else if (SH.field && !SH.field_seen) {
+        field_stop();
+    }
+    SH.field_want = NULL;
+    SH.field_seen = SH.field_next = false;
+}
+
+void shell_field_focus(const void *id, const char *value)
+{
+    SH.field_want = id;
+    snprintf(SH.field_want_text, sizeof SH.field_want_text, "%s", value ? value : "");
+}
+
+bool shell_field_active(const void *id)
+{
+    return id ? SH.field == id : SH.field != NULL;
+}
+
+/* The place in s, drawn from x, nearest mx. */
+static int field_cursor_at(TTF_Font *f, const char *s, float x, float mx)
+{
+    int best = 0, len = (int)strlen(s);
+    float bd = fabsf(mx - x);
+    for (int i = 1; i <= len; i++) {
+        if (i < len && ((unsigned char)s[i] & 0xC0) == 0x80)
+            continue;
+        char part[64];
+        snprintf(part, sizeof part, "%.*s", i, s);
+        float d = fabsf(mx - (x + text_w(f, part)));
+        if (d < bd) {
+            bd = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
+static bool field(const void *id, UIRect r, TTF_Font *f, const char *value, char *out, size_t n, bool left)
+{
+    const float pad = 6;
+    bool on = SH.field == id, taken = false;
+    if (!on && !SH.field_want && (uiin_clicked(r) || SH.field_next)) {
+        SH.field_want = id;
+        snprintf(SH.field_want_text, sizeof SH.field_want_text, "%s", value);
+        SH.field_next = false;
+    }
+    if (on) {
+        SH.field_seen = true;
+        float right = r.x + r.w - pad;
+        if (uiin_key(SDLK_ESCAPE)) {
+            field_stop();
+            on = false;
+        } else if (uiin_key(SDLK_RETURN) || uiin_key(SDLK_KP_ENTER) || uiin_key(SDLK_TAB)) {
+            taken = true;
+            SH.field_next = uiin_key(SDLK_TAB);
+        } else if (uiin_clicked(r)) {
+            float mx, my;
+            uiin_mouse(&mx, &my);
+            SH.field_cur = field_cursor_at(f, SH.field_line, left ? r.x + pad : right - text_w(f, SH.field_line), mx);
+            SH.field_fresh = false;
+        } else if (uiin_clicked_outside(r)) {
+            taken = true;
+        } else {
+            if (SH.field_fresh) {
+                /* the whole value is selected: typing replaces it */
+                if (uiin_typed()[0] || uiin_key(SDLK_BACKSPACE) || uiin_key(SDLK_DELETE)) {
+                    SH.field_line[0] = '\0';
+                    SH.field_cur = 0;
+                    SH.field_fresh = false;
+                } else if (uiin_key(SDLK_LEFT) || uiin_key(SDLK_RIGHT) || uiin_key(SDLK_HOME) ||
+                           uiin_key(SDLK_END)) {
+                    SH.field_fresh = false;
+                }
+            }
+            char was[sizeof SH.field_line];
+            int was_cur = SH.field_cur;
+            memcpy(was, SH.field_line, sizeof was);
+            edit_text(SH.field_line, sizeof SH.field_line, &SH.field_cur, 0);
+            /* the box takes no more than it shows */
+            if (strlen(SH.field_line) > strlen(was) && text_w(f, SH.field_line) > r.w - 2 * pad) {
+                memcpy(SH.field_line, was, sizeof was);
+                SH.field_cur = was_cur;
+            }
+        }
+        if (taken) {
+            snprintf(out, n, "%s", SH.field_line);
+            field_stop();
+            on = false;
+        }
+    }
+
+    skin_input(r, on, !on && uiin_over(r), false);
+    const char *s = on ? SH.field_line : value;
+    float th = skin_text_height(f), ty = r.y + (r.h - th) * 0.5f;
+    float tw = text_w(f, s), tx = left ? r.x + pad : r.x + r.w - pad - tw;
+    if (on && SH.field_fresh && s[0])
+        skin_fill(ui_rect(tx - 2, ty, tw + 4, th), skin_tone(TONE_ACCENT), 0.35f);
+    ink(f, s, tx, ty, skin_tone(TONE_TEXT), ALIGN_LEFT);
+    if (on && !SH.field_fresh && (SDL_GetTicks() / 530) % 2 == 0) {
+        char before[sizeof SH.field_line];
+        snprintf(before, sizeof before, "%.*s", SH.field_cur, s);
+        skin_fill(ui_rect(tx + text_w(f, before), ty, 2, th), skin_tone(TONE_ACCENT), 0.9f);
+    }
+    return taken;
+}
+
+bool shell_field(const void *id, UIRect r, TTF_Font *f, const char *value, char *out, size_t n)
+{
+    return field(id, r, f, value, out, n, false);
+}
+
+bool shell_text_field(const void *id, UIRect r, TTF_Font *f, const char *value, char *out, size_t n)
+{
+    return field(id, r, f, value, out, n, true);
+}
+
+/* ---- the command list (wmenu's, fuzzel's) ---- */
+
+void shell_launcher_open(void)
+{
+    SH.launcher = true;
+    SH.query[0] = '\0';
+    SH.qcur = 0;
+    SH.sel = 0;
+    SH.first = 0;
+    SH.launcher_fresh = true;
+    uiin_mouse(&SH.launcher_mx, &SH.launcher_my);
+    SH.menu = false;
+    uiin_set_typing(true);
+}
+
+bool shell_launcher_showing(void)
+{
+    return SH.launcher;
+}
+
+static void launcher_close(void)
+{
+    SH.launcher = false;
+    uiin_set_typing(SH.console);
+}
+
+static bool contains(const char *hay, const char *needle)
+{
+    size_t n = strlen(needle);
+    for (; *hay; hay++)
+        if (!strncasecmp(hay, needle, n))
+            return true;
+    return n == 0;
+}
+
+/* how well c answers the query: lower is better, -1 not at all */
+static int score(const ShellCommand *c, const char *query)
+{
+    char q[64];
+    snprintf(q, sizeof q, "%s", query);
+    char *tok[8];
+    int nt = shell_split(q, tok, 8);
+    if (!nt)
+        return 0;
+    int best = 0;
+    for (int i = 0; i < nt; i++) {
+        bool in_label = contains(c->label, tok[i]), in_word = c->word && contains(c->word, tok[i]);
+        bool in_section = c->section && contains(c->section, tok[i]);
+        if (!in_label && !in_word && !in_section)
+            return -1;
+        int s = 3;
+        size_t n = strlen(tok[i]);
+        if (!strncasecmp(c->label, tok[i], n) || (c->word && !strcasecmp(c->word, tok[i])))
+            s = 0;
+        else if (c->word && !strncasecmp(c->word, tok[i], n))
+            s = 1;
+        else if (in_label)
+            for (const char *p = c->label; *p; p++)
+                if ((p == c->label || p[-1] == ' ') && !strncasecmp(p, tok[i], n)) {
+                    s = 2;
+                    break;
+                }
+        best += s;
+    }
+    return best;
+}
+
+typedef struct {
+    int cmd;           /* -1: a heading */
+    const char *title; /* the heading's */
+    int score;
+} Row;
+
+static int by_score(const void *a, const void *b)
+{
+    const Row *x = a, *y = b;
+    return x->score != y->score ? x->score - y->score : x->cmd - y->cmd;
+}
+
+int shell_launcher(int w, int h, const ShellCommand *c, int n)
+{
+    if (!SH.launcher)
+        return 0;
+    const Fonts *fo = &SH.fonts;
+    const Theme *t = skin_theme();
+    int got = 0;
+
+    /* the line typed, but not in the frame it opened: the key that opened it */
+    if (!SH.launcher_fresh) {
+        if (uiin_key(SDLK_ESCAPE)) {
+            launcher_close();
+            return 0;
+        }
+        if (!uiin_key(SDLK_UP) && !uiin_key(SDLK_DOWN))
+            edit_text(SH.query, sizeof SH.query, &SH.qcur, 0);
+    }
+
+    /* the rows: under their headings while nothing is typed, best first after */
+    static Row rows[400];
+    int nr = 0;
+    if (!SH.query[0]) {
+        const char *last = NULL;
+        for (int i = 0; i < n && nr < 398; i++) {
+            if (!c[i].label)
+                continue;
+            if (c[i].section && (!last || strcmp(last, c[i].section))) {
+                rows[nr++] = (Row){-1, c[i].section, 0};
+                last = c[i].section;
+            }
+            rows[nr++] = (Row){i, NULL, 0};
+        }
+    } else {
+        for (int i = 0; i < n && nr < 398; i++) {
+            int s = c[i].label ? score(&c[i], SH.query) : -1;
+            if (s >= 0)
+                rows[nr++] = (Row){i, NULL, s};
+        }
+        qsort(rows, (size_t)nr, sizeof rows[0], by_score);
+    }
+
+    float cw = fminf(600, (float)w - 32);
+    float row_h = skin_text_height(fo->mono) + 10, head_h = skin_text_height(fo->mono_small_bold) + 12;
+    float list_max = (float)h * 0.62f;
+    int visible = (int)(list_max / row_h);
+    if (visible < 4)
+        visible = 4;
+    UIRect card = {((float)w - cw) / 2, fmaxf(SHELL_BAR_H + 12, (float)h * 0.12f), cw, 0};
+
+    /* keys: they move the pick over the rows that can be picked */
+    static char last_query[64];
+    if (strcmp(last_query, SH.query)) {
+        snprintf(last_query, sizeof last_query, "%s", SH.query);
+        SH.sel = 0;
+        SH.first = 0;
+    }
+    int pickable[400], np = 0;
+    for (int i = 0; i < nr; i++)
+        if (rows[i].cmd >= 0 && !c[rows[i].cmd].disabled)
+            pickable[np++] = i;
+    if (SH.sel >= np)
+        SH.sel = np ? np - 1 : 0;
+    if (uiin_key(SDLK_DOWN) && np)
+        SH.sel = (SH.sel + 1) % np;
+    if (uiin_key(SDLK_UP) && np)
+        SH.sel = (SH.sel + np - 1) % np;
+    if (uiin_key(SDLK_PAGEDOWN) && np)
+        SH.sel = SH.sel + visible / 2 < np ? SH.sel + visible / 2 : np - 1;
+    if (uiin_key(SDLK_PAGEUP) && np)
+        SH.sel = SH.sel > visible / 2 ? SH.sel - visible / 2 : 0;
+    if ((uiin_key(SDLK_RETURN) || uiin_key(SDLK_KP_ENTER)) && np) {
+        launcher_close();
+        return c[rows[pickable[SH.sel]].cmd].id;
+    }
+    int sel_row = np ? pickable[SH.sel] : -1;
+    /* the list's window follows the pick */
+    float hh = 0;
+    for (int i = SH.first; i < nr && i <= sel_row; i++)
+        hh += rows[i].cmd < 0 ? head_h : row_h;
+    if (sel_row >= 0 && sel_row < SH.first)
+        SH.first = sel_row > 0 && rows[sel_row - 1].cmd < 0 ? sel_row - 1 : sel_row;
+    while (sel_row >= 0 && hh > list_max && SH.first < sel_row) {
+        hh -= rows[SH.first].cmd < 0 ? head_h : row_h;
+        SH.first++;
+    }
+
+    float input_h = skin_text_height(fo->mono) + 22;
+    float lh = 0;
+    int last_row = SH.first;
+    for (; last_row < nr; last_row++) {
+        float rh = rows[last_row].cmd < 0 ? head_h : row_h;
+        if (lh + rh > list_max)
+            break;
+        lh += rh;
+    }
+    card.h = input_h + (nr ? lh + 12 : row_h + 12) + 34;
+
+    UIRect all = {0, 0, (float)w, (float)h};
+    uiin_solid(all); /* while it is open, the window is the list's */
+    skin_fill(all, t->bg, 0.45f);
+    /* rofi's card: the panel inside a 3px border in the accent */
+    skin_fill(card, t->panel, 0.98f);
+    skin_note(card, false);
+    /* the line typed, over its 2px rule */
+    float ix = card.x + 18, iy = card.y + 11;
+    skin_glyph(ix + 8, iy + skin_text_height(fo->mono) * 0.5f, 14, fo->icon);
+    float qx = ix + 26;
+    if (SH.query[0])
+        ink(fo->mono, SH.query, qx, iy, t->text, ALIGN_LEFT);
+    else
+        ink(fo->mono, "type to find a command", qx, iy, skin_tone(TONE_MUTED), ALIGN_LEFT);
+    char before[64];
+    snprintf(before, sizeof before, "%.*s", SH.qcur, SH.query);
+    if ((SDL_GetTicks() / 530) % 2 == 0)
+        skin_fill(ui_rect(qx + text_w(fo->mono, before), iy, 8, skin_text_height(fo->mono)),
+                  skin_tone(TONE_ACCENT), 0.85f);
+    skin_fill(ui_rect(card.x + 3, card.y + input_h, card.w - 6, 2), t->accent, 1);
+
+    float y = card.y + input_h + 8;
+    float mx, my;
+    uiin_mouse(&mx, &my);
+    bool moved = mx != SH.launcher_mx || my != SH.launcher_my;
+    SH.launcher_mx = mx;
+    SH.launcher_my = my;
+    float wheel = uiin_wheel();
+    if (wheel != 0 && np) {
+        SH.sel -= (int)wheel;
+        SH.sel = SH.sel < 0 ? 0 : SH.sel >= np ? np - 1 : SH.sel;
+    }
+    if (!nr)
+        mid(fo->mono, "nothing called that", card.x + 18, y + row_h * 0.5f, skin_tone(TONE_MUTED),
+            ALIGN_LEFT);
+    for (int i = SH.first; i < last_row; i++) {
+        if (rows[i].cmd < 0) {
+            /* the root menu's headings: bold, upper case, in the accent */
+            mid(fo->mono_small_bold, rows[i].title, card.x + 18, y + head_h * 0.55f, skin_tone(TONE_ACCENT),
+                ALIGN_LEFT);
+            y += head_h;
+            continue;
+        }
+        const ShellCommand *cm = &c[rows[i].cmd];
+        UIRect r = {card.x + 6, y, card.w - 12, row_h};
+        bool hv = !cm->disabled && uiin_over(r);
+        int pi = -1;
+        for (int j = 0; j < np; j++)
+            if (pickable[j] == i)
+                pi = j;
+        /* the pointer picks only when it moves, so the keys keep their pick */
+        if (hv && moved && pi >= 0)
+            SH.sel = pi;
+        bool picked = i == sel_row;
+        Rgb fg = cm->disabled ? skin_tone(TONE_MUTED) : t->text;
+        if (picked) {
+            /* SYN-OS's menus: the pick filled in the accent */
+            skin_fill(r, t->accent, 1);
+            fg = skin_tone(TONE_ON_ACCENT);
+        }
+        float cy = y + row_h * 0.5f;
+        if (cm->icon)
+            mid(fo->icon, cm->icon, r.x + 22, cy, picked ? fg : skin_tone(TONE_MUTED), ALIGN_CENTER);
+        mid(fo->mono, cm->label, r.x + 42, cy, fg, ALIGN_LEFT);
+        float kx = r.x + r.w - 10;
+        if (cm->key) {
+            float kw = skin_keycap_width(fo->mono_small, cm->key);
+            skin_keycap(ui_rect(kx - kw, cy - 9, kw, 19), fo->mono_small, cm->key);
+            kx -= kw + 10;
+        }
+        if (cm->word) {
+            char wd[40];
+            snprintf(wd, sizeof wd, ":%s", cm->word);
+            kx -= mid(fo->mono_small, wd, kx, cy, picked ? fg : skin_tone(TONE_MUTED), ALIGN_RIGHT) + 10;
+        }
+        if (cm->on)
+            kx -= mid(fo->icon, ICON_CHECK, kx, cy, picked ? fg : skin_tone(TONE_GOOD), ALIGN_RIGHT) + 10;
+        /* found by a search: where it lives */
+        if (SH.query[0] && cm->section)
+            mid(fo->mono_small, cm->section, kx, cy, picked ? fg : skin_tone(TONE_MUTED), ALIGN_RIGHT);
+        if (hv && cm->tip)
+            uiin_tooltip(cm->tip);
+        if (hv && uiin_clicked(r)) {
+            got = cm->id;
+            launcher_close();
+        }
+        y += row_h;
+    }
+    /* the hints, wmenu's way */
+    float by = card.y + card.h - 22;
+    char foot[120];
+    snprintf(foot, sizeof foot, "%d of %d   up/down pick   Enter runs   Esc closes", np, n);
+    mid(fo->mono_small, foot, card.x + 18, by, skin_tone(TONE_MUTED), ALIGN_LEFT);
+    /* a click off the card closes it */
+    if (uiin_clicked(all) && !uiin_over(card))
+        launcher_close();
+    return got;
+}
+
+const ShellCommand *shell_lookup(const ShellCommand *c, int n, const char *word)
+{
+    for (int i = 0; i < n; i++)
+        if (c[i].word && !strcasecmp(c[i].word, word))
+            return &c[i];
+    return NULL;
+}
+
+void shell_list(const ShellCommand *c, int n)
+{
+    const char *last = NULL;
+    for (int i = 0; i < n; i++) {
+        if (!c[i].word)
+            continue;
+        if (c[i].section && (!last || strcmp(last, c[i].section))) {
+            shell_print(SHELL_HEAD, "%s", c[i].section);
+            last = c[i].section;
+        }
+        shell_print(c[i].disabled ? SHELL_NOTE : SHELL_OUT, "  %-14s %s%s%s%s", c[i].word, c[i].label,
+                    c[i].key ? "  (" : "", c[i].key ? c[i].key : "", c[i].key ? ")" : "");
+    }
 }

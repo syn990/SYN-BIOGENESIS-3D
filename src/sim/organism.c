@@ -69,6 +69,17 @@ static void org_create(Organism *o)
     o->seg_color = (uint8_t *)(block + v3s + dbls);
     for (int i = 0; i < n; i++)
         o->seg_color[i] = o->gc->genes[i % o->gc->ngenes].color;
+    double all = 0, green = 0, hunt = 0;
+    for (int j = 0; j < o->gc->ngenes; j++) {
+        const Gene *g = &o->gc->genes[j];
+        all += g->length;
+        if (g->color == COL_GREEN)
+            green += g->length;
+        else if (g->color == COL_RED || g->color == COL_GRAY || g->color == COL_WHITE)
+            hunt += g->length;
+    }
+    o->green_frac = all > 0 ? green / all : 0;
+    o->hunter_frac = all > 0 ? hunt / all : 0;
 }
 
 Organism *org_new_bare(World *w, GeneticCode *gc)
@@ -113,6 +124,41 @@ static void turtle_pitch(V3 *h, V3 *u, double b)
     *u = nu;
 }
 
+/* An orb's arms: n of them spread over a sphere, the most of the way from
+ * each other a few points allow */
+static V3 orb_arm(int n, int i)
+{
+    static const double t = 0.94280904158206336587; /* sqrt(8/9): a tetrahedron's */
+    static const double s = 0.57735026918962576451; /* 1/sqrt(3): a cube's */
+    switch (n) {
+    case 1: return v3(1, 0, 0);
+    case 2: return v3(0, 0, i ? -1 : 1);
+    case 3: {
+        static const double k[3][3] = {{0, 0, 1}, {-0.86602540378443864676, 0, -0.5},
+                                       {0.86602540378443864676, 0, -0.5}};
+        return v3(k[i][0], k[i][1], k[i][2]);
+    }
+    case 4:
+        if (i == 0)
+            return v3(0, 0, 1);
+        return v3(t * d_cos((i - 1) * 2 * D_PI / 3), t * d_sin((i - 1) * 2 * D_PI / 3), -1.0 / 3);
+    case 5:
+    case 7:
+        /* a ring of n - 2 round the middle, one up and one down */
+        if (i == 0)
+            return v3(0, 0, 1);
+        if (i == 1)
+            return v3(0, 0, -1);
+        return v3(d_cos((i - 2) * 2 * D_PI / (n - 2)), d_sin((i - 2) * 2 * D_PI / (n - 2)), 0);
+    case 6: {
+        static const double k[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+        return v3(k[i][0], k[i][1], k[i][2]);
+    }
+    default:
+        return v3(i & 1 ? s : -s, i & 2 ? s : -s, i & 4 ? s : -s);
+    }
+}
+
 void gc_body_shape(const GeneticCode *gc, double scale, V3 *bs, V3 *be)
 {
     int symmetry = gc->symmetry;
@@ -126,10 +172,28 @@ void gc_body_shape(const GeneticCode *gc, double scale, V3 *bs, V3 *be)
         V3 p = v3(0, 0, 0), h = v3(1, 0, 0), u = v3(0, 0, 1);
         for (int j = 0; j < sequence; j++, seg++) {
             const Gene *g = &gc->genes[j];
-            if (j == 0) {
+            if (j == 0 && gc->plan == PLAN_ORB) {
+                /* its corner of the orb, the whole orb turned about the
+                 * axis by the first gene's turn (the other way on a
+                 * mirrored arm, itself reflected); up is toward the axis's
+                 * top, square to the arm */
+                V3 d = orb_arm(symmetry, i);
+                double a = mirrored ? -g->theta : g->theta;
+                if (mirrored)
+                    d.y = -d.y;
+                h = v3(d.x * d_cos(a) - d.y * d_sin(a), d.x * d_sin(a) + d.y * d_cos(a), d.z);
+                V3 side = v3_cross(h, v3(0, 0, 1));
+                u = v3_unit_or(v3_cross(side, h), v3(1, 0, 0));
+            } else if (j == 0) {
                 double a = mirrored ? D_PI - (g->theta + (i - 1) * 2 * D_PI / symmetry)
                                     : g->theta + i * 2 * D_PI / symmetry;
                 h = v3(d_cos(a), d_sin(a), 0);
+                if (gc->plan == PLAN_CONE && gc->cone != 0) {
+                    /* tilted out of the disk, up for a positive cone */
+                    double c = d_cos(gc->cone), sn = d_sin(gc->cone);
+                    h = v3(c * d_cos(a), c * d_sin(a), sn);
+                    u = v3(-sn * d_cos(a), -sn * d_sin(a), c);
+                }
             } else {
                 turtle_yaw(&h, u, mirrored ? -g->theta : g->theta);
             }
@@ -251,13 +315,25 @@ static bool org_fits_world(const Organism *o)
 }
 
 /* Twelve tries at a free random spot, as World.genesis did. Each axis's
- * draw is made only if the body fits along it, in x, y, z order. */
+ * draw is made only if the body fits along it, in x, y, z order. A founder
+ * starts at the height its line keeps to, in a band a fifth of the water
+ * deep around it (all of it, if that is too thin for the body): placed
+ * anywhere, most would spend their first energy swimming there. */
 static bool org_place_random(Organism *o)
 {
     World *w = o->world;
     o->pos = v3(0, 0, 0);
     org_update_geometry(o);
     V3 lo0 = o->lo, ext = v3_sub(o->hi, o->lo);
+    int ztop = (int)(w->depth - ext.z - 1);
+    /* the band's floor and top, for the body's lowest point */
+    double at = o->gc->height * w->depth - ext.z / 2, half = w->depth / 10.0;
+    int zlo = (int)fmax(0, at - half), zhi = (int)fmin(ztop, at + half);
+    if (zhi - zlo < 1) {
+        zlo = 0;
+        zhi = ztop;
+    }
+    ztop = zhi;
     for (int i = 12; i > 0; i--) {
         int bx = (int)(w->width - ext.x - 1);
         if (bx <= 0)
@@ -267,10 +343,10 @@ static bool org_place_random(Organism *o)
         if (by <= 0)
             return false;
         int oy = jr_next_int(&g_rng, by);
-        int bz = (int)(w->depth - ext.z - 1);
+        int bz = ztop - zlo;
         if (bz <= 0)
             return false;
-        int oz = jr_next_int(&g_rng, bz);
+        int oz = zlo + jr_next_int(&g_rng, bz);
         o->pos = v3_add(v3_sub(v3(ox, oy, oz), lo0), v3(0.5, 0.5, 0.5));
         org_update_geometry(o);
         if (!world_fast_check_hit(w, o)) {
@@ -281,28 +357,45 @@ static bool org_place_random(Organism *o)
     return false;
 }
 
-/* Where a child may go: 0.9's eight directions around its parent on the
- * plane, in 0.9's order; then, if none has room, the eighteen above and
- * below, each above followed by the below under it. Each list is tried from
- * a random place in it, as 0.9 tried its eight, and the pairing means a
- * parent under the ceiling (or on the floor) has its children go to every
- * direction below (or above) alike. */
-static const int k_ring[8][3] = {
-    {1, 0, 0}, {1, 1, 0}, {0, 1, 0}, {-1, 1, 0}, {-1, 0, 0}, {-1, -1, 0}, {0, -1, 0}, {1, -1, 0},
+/* Where a child may go: any of the 26 directions around its parent. 0.9
+ * had 8, around it on the plane; trying those first, as an earlier version
+ * of this program did, grew every line into a sheet. The 26 are tried from
+ * a random one, then on by a random stride that shares no factor with 26,
+ * so all are tried, and which comes after a full one is the dice's choice
+ * rather than a list's neighbour. */
+static const int k_dirs[26][3] = {
+    {1, 0, 0},   {-1, 0, 0},  {0, 1, 0},   {0, -1, 0},  {0, 0, 1},    {0, 0, -1},  {1, 1, 0},
+    {-1, -1, 0}, {1, -1, 0},  {-1, 1, 0},  {1, 0, 1},   {-1, 0, -1},  {1, 0, -1},  {-1, 0, 1},
+    {0, 1, 1},   {0, -1, -1}, {0, 1, -1},  {0, -1, 1},  {1, 1, 1},    {-1, -1, -1}, {1, 1, -1},
+    {-1, -1, 1}, {1, -1, 1},  {-1, 1, -1}, {-1, 1, 1},  {1, -1, -1},
 };
-static const int k_stack[18][3] = {
-    {0, 0, 1},   {0, 0, -1},  {1, 0, 1},   {1, 0, -1},  {1, 1, 1},   {1, 1, -1},
-    {0, 1, 1},   {0, 1, -1},  {-1, 1, 1},  {-1, 1, -1}, {-1, 0, 1},  {-1, 0, -1},
-    {-1, -1, 1}, {-1, -1, -1}, {0, -1, 1}, {0, -1, -1}, {1, -1, 1},  {1, -1, -1},
-};
+static const int k_strides[12] = {1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25};
 
-/* The child beside its parent in direction d, boxes one unit apart. */
+/* The child beside its parent in direction d: as far from the parent's
+ * centre as both bodies reach, and a unit more, the same in every
+ * direction, and further if that would still leave their boxes touching
+ * (beside a flat body, its box's corners). 0.9 put them a unit apart box to
+ * box, which beside a flat body is far to the side and only a few units
+ * above or below. cc and ce are the child's box's centre (from its centre
+ * of mass) and half its size. */
 static bool org_try_beside(Organism *o, Organism *parent, const int *d, V3 cc, V3 ce)
 {
     World *w = o->world;
+    V3 dir = v3_unit_or(v3(d[0], d[1], d[2]), v3(1, 0, 0));
     V3 pc = v3_scale(v3_add(parent->lo, parent->hi), 0.5);
-    V3 gap = v3_add(v3_add(v3_scale(v3_sub(parent->hi, parent->lo), 0.5), ce), v3(1, 1, 1));
-    o->pos = v3_sub(v3_add(pc, v3(gap.x * d[0], gap.y * d[1], gap.z * d[2])), cc);
+    V3 pe = v3_scale(v3_sub(parent->hi, parent->lo), 0.5);
+    double u[3] = {dir.x, dir.y, dir.z}, off[3], need[3] = {pe.x + ce.x + 1, pe.y + ce.y + 1,
+                                                          pe.z + ce.z + 1};
+    V3 a = v3_sub(v3_add(parent->pos, cc), pc);
+    off[0] = a.x;
+    off[1] = a.y;
+    off[2] = a.z;
+    double clear = DBL_MAX;
+    for (int k = 0; k < 3; k++)
+        if (u[k] != 0)
+            clear = bio_min(clear, (need[k] - (u[k] > 0 ? off[k] : -off[k])) / fabs(u[k]));
+    double s = bio_max(parent->radius + o->radius + 1, clear);
+    o->pos = v3_add(parent->pos, v3_scale(dir, s));
     org_update_geometry(o);
     if (!org_fits_world(o) || world_fast_check_hit(w, o))
         return false;
@@ -320,18 +413,15 @@ static bool org_place_near(Organism *o, Organism *parent)
     o->pos = v3(0, 0, 0);
     org_update_geometry(o);
     V3 cc = v3_scale(v3_add(o->lo, o->hi), 0.5), ce = v3_scale(v3_sub(o->hi, o->lo), 0.5);
-    int npos = jr_next_int(&g_rng, 8);
-    for (int k = 0; k < 8; k++, npos = (npos + 1) % 8)
-        if (org_try_beside(o, parent, k_ring[npos], cc, ce))
-            return true;
-    npos = jr_next_int(&g_rng, 18);
-    for (int k = 0; k < 18; k++, npos = (npos + 1) % 18)
-        if (org_try_beside(o, parent, k_stack[npos], cc, ce))
+    int npos = jr_next_int(&g_rng, 26);
+    int stride = k_strides[jr_next_int(&g_rng, 12)];
+    for (int k = 0; k < 26; k++, npos = (npos + stride) % 26)
+        if (org_try_beside(o, parent, k_dirs[npos], cc, ce))
             return true;
     return false;
 }
 
-/* A founder's energy comes out of the air's CO2 (and puts the same in O2)
+/* A founder's energy comes out of the water's CO2 (and puts the same in O2)
  * only once it has a place: in 0.9 a founder that found no room took its
  * energy with it, and the world's books no longer added up. */
 static bool org_found(Organism *o)
@@ -344,8 +434,9 @@ static bool org_found(Organism *o)
     org_build_body(o);
     if (!org_place_random(o))
         return false;
+    o->founder = o->id;
     o->energy = bio_min(P.initial_energy, w->co2);
-    world_decrease_co2(w, o->energy);
+    world_take_co2(w, o->energy);
     world_add_o2(w, o->energy);
     return true;
 }
@@ -355,6 +446,40 @@ bool org_random_create(Organism *o)
     gc_assign(&o->gc, NULL);
     o->gc = gc_new_random();
     return org_found(o);
+}
+
+bool org_place_at(Organism *o, GeneticCode *gc, V3 p)
+{
+    World *w = o->world;
+    gc_assign(&o->gc, gc);
+    o->parent_id = -1;
+    o->generation = 1;
+    o->growth_ratio = 16;
+    org_create(o);
+    org_build_body(o);
+    o->pos = p;
+    org_update_geometry(o);
+    if (!org_fits_world(o) || world_fast_check_hit(w, o))
+        return false;
+    o->id = world_new_id(w);
+    o->founder = o->id;
+    o->energy = bio_min(P.initial_energy, w->co2);
+    world_take_co2(w, o->energy);
+    world_add_o2(w, o->energy);
+    return true;
+}
+
+void org_revive(Organism *o)
+{
+    if (o->alive)
+        return;
+    for (int i = 0; i < o->segments; i++)
+        o->seg_color[i] = o->gc->genes[i % o->gc->ngenes].color;
+    o->alive = true;
+    o->has_moved = true;
+    o->age = 0;
+    o->world->population++;
+    stats_population_increase(&o->world->stats, o->world->population);
 }
 
 bool org_place_with_code(Organism *o, GeneticCode *gc)
@@ -369,14 +494,17 @@ bool org_inherit(Organism *o, Organism *parent, bool first)
     if (parent->infected_gc) {
         inherit_gc = parent->infected_gc;
         o->generation = parent->infected_generation + 1;
+        o->founder = parent->infected_founder;
     } else {
         inherit_gc = parent->gc;
         o->generation = parent->generation + 1;
+        o->founder = parent->founder;
     }
     gc_assign(&o->gc, NULL);
     o->gc = gc_new_mutated(inherit_gc);
     o->parent_id = parent->id;
     o->growth_ratio = 16;
+    o->aim = parent->aim;
     /* the child buds off its parent: the parent's frame, turned about the
      * parent's up axis by the turn org_new drew */
     o->q = quat_normalize(quat_mul(parent->q, o->q));
@@ -420,7 +548,7 @@ static void org_grow(Organism *o)
     }
 }
 
-static void org_reproduce(Organism *o)
+void org_reproduce(Organism *o)
 {
     for (int i = 0; i < bio_between_i(o->n_children, 1, 8); i++) {
         Organism *child = org_new(o->world);
@@ -436,7 +564,8 @@ static void org_reproduce(Organism *o)
 }
 
 /* Outside the box, the velocity along each side crossed bounces and the
- * spin stops, as 0.9 did at its edges. */
+ * spin stops, as 0.9 did at its edges. A corpse coming down on the floor
+ * (or up to the surface) stops there instead. */
 static bool org_is_inside_world(Organism *o)
 {
     World *w = o->world;
@@ -450,7 +579,7 @@ static bool org_is_inside_world(Organism *o)
         out = true;
     }
     if (o->lo.z < 0 || o->hi.z >= w->depth) {
-        o->v.z = -o->v.z;
+        o->v.z = o->alive ? -o->v.z : 0;
         out = true;
     }
     if (out)
@@ -475,40 +604,151 @@ static V3 v3_drop_tiny(V3 a)
     return a;
 }
 
+/* ---- senses ---- */
+
+typedef struct {
+    Organism *o;
+    double hunger; /* 1 starving .. 0 with enough for a child */
+    V3 pull;
+} Senses;
+
+/* What b adds to o's pull: toward it (or away) by how much each of o's
+ * drives cares about what b is, the more the nearer. A living body is seen,
+ * as far as the light on it allows: from `sight` away at the surface, and
+ * by the square root of the light below (as the noise in so few photons
+ * would have it), so from 61% of sight a light depth down and from nowhere
+ * in the dark. A corpse is smelled, light or not. Its parent and its
+ * children are left out, as 0.9 left them out of harm.
+ *
+ * What draws it is drawn by its hunger: a body with the energy for a child
+ * seeks nothing, and the hungrier it is the harder it seeks. What it shuns
+ * it shuns whatever it holds. Hunters that chased prey however full they
+ * were stripped the water and starved after it. */
+static void sense_one(Organism *b, void *ud)
+{
+    Senses *s = ud;
+    Organism *o = s->o;
+    if (b == o || b->removed || o->parent_id == b->id || o->id == b->parent_id)
+        return;
+    V3 r = v3_sub(b->pos, o->pos);
+    double d = v3_len(r);
+    double reach = b->alive ? P.sight * sqrt(b->lit) : P.sight;
+    if (!(d < reach) || d < 1e-9)
+        return;
+    const double *dr = o->gc->drive;
+    double want = b->alive ? dr[DRIVE_PLANTS] * b->green_frac + dr[DRIVE_HUNTERS] * b->hunter_frac +
+                                 dr[DRIVE_CROWD]
+                           : dr[DRIVE_DEAD];
+    if (want > 0)
+        want *= s->hunger;
+    if (want != 0)
+        s->pull = v3_add(s->pull, v3_scale(r, want * (1 - d / reach) / d));
+}
+
+/* Up or down toward the height its line keeps to, the harder the further
+ * it is from it: a fifth of the water away or more, with all it has. Every
+ * living body has it, cilia or none; it settles where it keeps. */
+static double height_pull(const Organism *o)
+{
+    double depth = o->world->depth;
+    return depth > 0 ? bio_between(5 * (o->gc->height - o->pos.z / depth), -1, 1) : 0;
+}
+
+void org_sense(Organism *o)
+{
+    const double *dr = o->gc->drive;
+    double need = o->gc->reproduce_energy > 0 ? o->energy / o->gc->reproduce_energy : 1;
+    Senses s = {o, bio_between(1 - need, 0, 1), v3(0, 0, height_pull(o))};
+    if (dr[DRIVE_LIGHT] != 0)
+        s.pull = v3_add(s.pull, v3_scale(world_light_gradient(o->world, o->pos), dr[DRIVE_LIGHT]));
+    if (dr[DRIVE_CARBON] != 0)
+        s.pull = v3_add(s.pull, v3_scale(world_co2_gradient(o->world, o->pos), dr[DRIVE_CARBON]));
+    if (dr[DRIVE_PLANTS] != 0 || dr[DRIVE_HUNTERS] != 0 || dr[DRIVE_DEAD] != 0 ||
+        dr[DRIVE_CROWD] != 0)
+        world_visit(o->world, o->pos, P.sight, sense_one, &s);
+    o->aim = v3_clamp_len(s.pull, 1);
+}
+
 static void org_segments_frame_effects(Organism *o)
 {
     if (!o->alive)
         return;
-    double photosynthesis = 0;
+    double photosynthesis = 0, methane = 0;
+    V3 turn = v3(0, 0, 0);
     o->n_children = 1;
     for (int i = o->segments - 1; i >= 0; i--) {
         switch (o->seg_color[i]) {
-        case COL_CYAN:
-            if (jr_next_int(&g_rng, 100) < 8 && org_use_energy(o, P.cyan_energy_consumption)) {
-                /* 0.9's kick: a push along the segment, and a spin of fixed
-                 * size and random sense. The spin's axis is the one a push
-                 * along the segment would turn the body about; for a flat
-                 * body lying level that is 0.9's axis, straight up. */
-                V3 seg = v3_sub(o->we[i], o->ws[i]);
+        case COL_CYAN: {
+            V3 seg = v3_sub(o->we[i], o->ws[i]);
+            double want = v3_len(o->aim);
+            if (want > 0) {
+                /* Swimming, steadily: every frame a stroke of what 0.9's
+                 * kicks gave on average (an 8 in 100 chance of 12, along
+                 * the segment), costing as much on average, as hard as its
+                 * aim is strong. The stroke pushes along the segment, the
+                 * way nearer the aim, as much as the segment points that
+                 * way: one lying across the aim turns the body rather than
+                 * pushing it. Its turn brings the segment round to face the
+                 * aim. So a swimmer turns toward where it is going and swims
+                 * there, head first, and holds still when it is there. */
+                if (org_use_energy(o, P.cyan_energy_consumption * 0.08)) {
+                    V3 aim = v3_scale(o->aim, 1 / want), e = v3_unit_or(seg, v3(0, 0, 0));
+                    double along = v3_dot(e, aim);
+                    if (along < 0) {
+                        e = v3_scale(e, -1);
+                        along = -along;
+                    }
+                    o->v = v3_clamp_len(v3_add(o->v, v3_scale(e, 0.96 * along * want * o->m[i] / o->mass)),
+                                        P.max_vel);
+                    V3 turn = v3_scale(v3_cross(e, aim), 0.08 * want * o->m[i] * D_PI);
+                    o->w = v3_clamp_len(v3_add(o->w, org_inv_inertia_mul(o, turn)), P.max_rot);
+                }
+            } else if (jr_next_int(&g_rng, 100) < 8 && org_use_energy(o, P.cyan_energy_consumption)) {
+                /* nowhere to go: 0.9's kick, a push from the segment's start
+                 * to its end and a spin of random sense about the axis that
+                 * push would turn the body about (for a flat body lying
+                 * level, 0.9's axis, straight up) */
                 o->v = v3_clamp_len(v3_add(o->v, v3_scale(seg, 12.0 / o->mass)), P.max_vel);
+                double sense = bio_random_sign();
                 V3 mid = v3_sub(v3_scale(v3_add(o->ws[i], o->we[i]), 0.5), o->pos);
                 V3 up = quat_rotate(o->q, v3(0, 0, 1));
-                V3 axis = v3_unit_or(v3_cross(mid, seg), up);
-                double kick = bio_random_sign() * o->m[i] * D_PI;
-                o->w = v3_clamp_len(v3_add(o->w, org_inv_inertia_mul(o, v3_scale(axis, kick))),
-                                    P.max_rot);
+                V3 kick = v3_scale(v3_unit_or(v3_cross(mid, seg), up), sense * o->m[i] * D_PI);
+                o->w = v3_clamp_len(v3_add(o->w, org_inv_inertia_mul(o, kick)), P.max_rot);
             }
             break;
+        }
         case COL_GREEN:
-            if (org_use_energy(o, P.green_energy_consumption))
-                photosynthesis += o->m[i];
+            /* a leaf catches the light it lies across: its length as seen
+             * from above, in the light that reaches its middle */
+            if (org_use_energy(o, P.green_energy_consumption)) {
+                V3 a = o->ws[i], b = o->we[i];
+                double across = sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+                photosynthesis += across * world_light_at(o->world, v3_scale(v3_add(a, b), 0.5));
+                /* and it turns to lie across the light: a twist, by its
+                 * length, that tips its direction u toward the level,
+                 * -uz (u x up) */
+                V3 u = v3_unit_or(v3_sub(b, a), v3(0, 0, 0));
+                turn = v3_add(turn, v3_scale(v3_cross(u, v3(0, 0, 1)), -u.z * o->m[i]));
+            }
+            break;
+        case COL_PURPLE:
+            /* Color Mod's methane eater: its whole length, whatever the
+             * light, in the methane around it */
+            if (org_use_energy(o, P.purple_energy_consumption))
+                methane += o->m[i];
             break;
         case COL_YELLOW:
             o->n_children++;
             break;
         }
     }
-    o->energy += world_photosynthesis(o->world, photosynthesis);
+    int cell = world_cell_of(o->world, o->pos);
+    o->energy += world_photosynthesis(o->world, cell, photosynthesis);
+    if (methane > 0)
+        o->energy += world_methanotrophy(o->world, cell, methane);
+    if (P.leaf_turn > 0 && !v3_is_zero(turn))
+        o->w = v3_clamp_len(v3_add(o->w, org_inv_inertia_mul(o, v3_scale(turn, P.leaf_turn))),
+                            P.max_rot);
 }
 
 static void org_rubbing(Organism *o)
@@ -529,8 +769,11 @@ static void org_breath(Organism *o)
             world_organism_has_died(o->world, o, NULL);
         }
     } else {
-        /* the corpse slowly decays */
-        org_use_energy(o, bio_min(o->energy, P.decay_energy));
+        /* the corpse slowly rots, into methane where it lies (Color Mod's
+         * decomposition; the living breathe out CO2) */
+        double q = bio_min(o->energy, P.decay_energy);
+        if (q > 0)
+            o->energy -= world_decomposition(o->world, world_cell_of(o->world, o->pos), q);
     }
 }
 
@@ -542,7 +785,15 @@ bool org_move(Organism *o)
     o->w = v3_drop_tiny(o->w);
     if (o->frames_color > 0)
         o->frames_color--;
+    if (o->alive && (w->frame + o->id) % THINK_EVERY == 0)
+        org_sense(o);
     org_segments_frame_effects(o);
+    if (!o->alive)
+        o->v = v3_clamp_len(v3_sub(o->v, v3(0, 0, P.sink)), P.max_vel);
+    else if (o->aim.z != 0)
+        /* its float: a living body fills or empties it to rise or sink
+         * toward its aim, whatever its shape and with cilia or none */
+        o->v = v3_clamp_len(v3_add(o->v, v3(0, 0, P.rise * o->aim.z)), P.max_vel);
     org_rubbing(o);
     org_grow(o);
 
@@ -588,7 +839,9 @@ bool org_use_energy(Organism *o, double q)
 {
     if (o->energy < q)
         return false;
-    double respiration = world_respiration(o->world, q);
+    if (q == 0)
+        return true; /* nothing breathed (most uses cost nothing) */
+    double respiration = world_respiration(o->world, world_cell_of(o->world, o->pos), q);
     o->energy -= respiration;
     return respiration >= q;
 }
@@ -610,6 +863,7 @@ static void org_infected_by(Organism *o, Organism *infector)
 {
     infector->total_infected++;
     gc_assign(&o->infected_gc, infector->gc);
+    o->infected_founder = infector->founder;
     o->infected_generation = infector->generation;
     world_organism_has_been_infected(o->world, o, infector);
 }

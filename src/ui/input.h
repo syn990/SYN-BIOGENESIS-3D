@@ -32,9 +32,16 @@ void uiin_begin_frame(float scale);
 bool uiin_event(const SDL_Event *e);
 
 /* While drawing: */
+/* Blocked, nothing drawn is under the pointer or clicked (what lies under
+ * an open menu). */
+void uiin_block(bool on);
 bool uiin_over(UIRect r);
 bool uiin_clicked(UIRect r);           /* the left button let go over r, pressed over r */
 bool uiin_right_clicked(UIRect r);
+bool uiin_clicked_outside(UIRect r);  /* the left button let go, pressed outside r */
+/* button b (0 left, 1 right) went down over r this frame; is held now */
+bool uiin_pressed(UIRect r, int b);
+bool uiin_mouse_down(int b);
 void uiin_solid(UIRect r);             /* r is part of the interface this frame */
 void uiin_tooltip(const char *s);      /* shown by uiin_draw_tooltip at the end */
 void uiin_draw_tooltip(const Fonts *f, int w, int h);
@@ -46,6 +53,8 @@ float uiin_wheel(void);
 bool uiin_key(SDL_Keycode k);
 SDL_Keymod uiin_mods(void);
 const char *uiin_typed(void);
+/* Text typed by a script (SYN3D_SCRIPT): taken as SDL's would be. */
+void uiin_inject_text(const char *s);
 /* The console has the keyboard: keys go to it, not the window. */
 void uiin_set_typing(bool on);
 bool uiin_typing(void);

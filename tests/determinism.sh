@@ -8,11 +8,11 @@ bins="./syn-biogenesis-3d ./tests/syn-biogenesis-3d-O0"
 if command -v clang >/dev/null 2>&1; then
     clang -std=c11 -D_DEFAULT_SOURCE -DSYN3D_NO_WINDOW -O2 -ffp-contract=off -Isrc \
         -o tests/syn-biogenesis-3d-clang src/main.c src/headless.c src/options.c src/sim/*.c \
-        src/io/*.c -lm
+        src/io/*.c src/syn/*.c src/guide/palette.c -lm
     bins="$bins ./tests/syn-biogenesis-3d-clang"
 fi
 fail=0
-for args in "--size 1000 1000 4 --pitch 0" "--size 1000 1000 32" "--size 317 317 317 --pitch 100"; do
+for args in "--size 1000 1000 8 --pitch 0" "--size 600 600 300" "--size 400 400 400 --pitch 100"; do
     ref=""
     for bin in $bins; do
         h=$($bin --headless --seed 5 --frames 6000 $args --hash 2>&1 >/dev/null | grep hash)

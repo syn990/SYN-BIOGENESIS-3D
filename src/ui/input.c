@@ -28,6 +28,7 @@ static struct {
     float down_x[2], down_y[2];
     bool down[2], ours[2];
     bool released[2];
+    bool pressed[2]; /* went down this frame */
     /* what was drawn last frame (decides presses) and this frame */
     UIRect solid[2][SOLIDS];
     int nsolid[2];
@@ -39,12 +40,14 @@ static struct {
     bool typing;
     char tip[160];
     float wheel;
+    bool blocked;
 } I = {.scale = 1};
 
 void uiin_begin_frame(float scale)
 {
     I.scale = scale > 0 ? scale : 1;
     I.released[0] = I.released[1] = false;
+    I.pressed[0] = I.pressed[1] = false;
     I.nkeys = 0;
     I.typed[0] = 0;
     I.tip[0] = 0;
@@ -78,6 +81,7 @@ bool uiin_event(const SDL_Event *e)
             return on_solid(I.mx, I.my);
         if (e->type == SDL_MOUSEBUTTONDOWN) {
             I.down[b] = true;
+            I.pressed[b] = true;
             I.down_x[b] = I.mx;
             I.down_y[b] = I.my;
             I.ours[b] = on_solid(I.mx, I.my);
@@ -109,14 +113,19 @@ bool uiin_event(const SDL_Event *e)
     return false;
 }
 
+void uiin_block(bool on)
+{
+    I.blocked = on;
+}
+
 bool uiin_over(UIRect r)
 {
-    return skin_hit(r, (int)I.mx, (int)I.my);
+    return !I.blocked && skin_hit(r, (int)I.mx, (int)I.my);
 }
 
 static bool clicked_with(UIRect r, int b)
 {
-    return I.released[b] && I.ours[b] && skin_hit(r, (int)I.mx, (int)I.my) &&
+    return !I.blocked && I.released[b] && I.ours[b] && skin_hit(r, (int)I.mx, (int)I.my) &&
            skin_hit(r, (int)I.down_x[b], (int)I.down_y[b]);
 }
 
@@ -128,6 +137,22 @@ bool uiin_clicked(UIRect r)
 bool uiin_right_clicked(UIRect r)
 {
     return clicked_with(r, 1);
+}
+
+bool uiin_pressed(UIRect r, int b)
+{
+    return !I.blocked && b >= 0 && b < 2 && I.pressed[b] && I.ours[b] &&
+           skin_hit(r, (int)I.down_x[b], (int)I.down_y[b]);
+}
+
+bool uiin_mouse_down(int b)
+{
+    return b >= 0 && b < 2 && I.down[b];
+}
+
+bool uiin_clicked_outside(UIRect r)
+{
+    return !I.blocked && I.released[0] && !skin_hit(r, (int)I.down_x[0], (int)I.down_y[0]);
 }
 
 void uiin_solid(UIRect r)
@@ -179,6 +204,12 @@ const char *uiin_typed(void)
     return I.typed;
 }
 
+void uiin_inject_text(const char *s)
+{
+    if (I.typing && strlen(I.typed) + strlen(s) < sizeof I.typed)
+        strcat(I.typed, s);
+}
+
 void uiin_set_typing(bool on)
 {
     if (on != I.typing) {
@@ -197,5 +228,5 @@ bool uiin_typing(void)
 
 float uiin_wheel(void)
 {
-    return I.wheel;
+    return I.blocked ? 0 : I.wheel;
 }

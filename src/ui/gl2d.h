@@ -41,7 +41,20 @@ bool gl2d_tex_from_surface(SDL_Surface *s, Gl2dTex *out);
 void gl2d_tex_destroy(Gl2dTex *t);
 void gl2d_tex_draw(const Gl2dTex *t, float x, float y, float w, float h, SDL_Color tint);
 
+/* For GL drawing in the middle of the 2D (a body drawn in a box): draw
+ * what is batched, then afterwards put the 2D drawing's state back. */
+void gl2d_flush(void);
+void gl2d_resume(void);
+/* The innermost clipping rectangle, false when there is none; the
+ * target's height (GL counts rows from the bottom). */
+bool gl2d_clip_current(float *x0, float *y0, float *x1, float *y1);
+float gl2d_height(void);
+
 void gl2d_fill(float x, float y, float w, float h, SDL_Color c);
+/* What is drawn until the pop is cut to the rectangle (and to the ones
+ * pushed before it). */
+void gl2d_clip_push(float x, float y, float w, float h);
+void gl2d_clip_pop(void);
 /* SDL_RenderGeometry without a texture. */
 void gl2d_geometry(const SDL_Vertex *v, int nv, const int *idx, int ni);
 

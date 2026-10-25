@@ -35,15 +35,21 @@ typedef struct {
 
 #define WORLD_OPTIONS_HELP                                                                        \
     "  --seed N          the world's seed (default 1)\n"                                         \
-    "  --size W H D      the world box (default 1000 1000 32)\n"                                 \
-    "  --organisms N     random founders (default 15)\n"                                         \
-    "  --co2 X           carbon in the air at genesis (default 5000)\n"                          \
+    "  --size W H D      the world box, the surface on top (default 600 600 300)\n"             \
+    "  --organisms N     random founders (default 30)\n"                                         \
+    "  --co2 X           CO2 dissolved per million cubic units at genesis\n"                     \
+    "                    (default 156.25, 0.9's 5000 in its floor 32 deep)\n"                    \
+    "  --light L         depth over which the light falls to 1/e (default 100;\n"               \
+    "                    0: as bright at the floor as at the surface)\n"                         \
+    "  --sight S         how far organisms sense each other (default 120)\n"                     \
     "  --pitch P         percent of new genes that bend out of their plane\n"                    \
     "                    (default 50; 0 keeps every new body flat, as in 0.9)\n"                 \
     "  --radius R        segment thickness: capsule radius (default 1)\n"                        \
     "  --import FILE     add copies of a Biogenesis 0.9 being (.bgg); up to 4, each\n"           \
     "                    with its own line of descendants (CSV: marked, line2...)\n"            \
-    "  --copies K        copies of each imported being (default 1)\n"
+    "  --copies K        copies of each imported being (default 1)\n"                         \
+    "  --set NAME VALUE  any parameter by its name (as in a saved world: sink,\n"               \
+    "                    co2_diffusion, leaf_turn...)\n"
 
 /* Sets the parameters' defaults and o's. */
 void world_options_init(WorldOptions *o);

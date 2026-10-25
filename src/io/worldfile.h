@@ -12,11 +12,12 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-/* A whole world in a file (.b3w): the parameters, the air, the dice's
- * state, every organism as it stands between two frames, and every
- * genetic code once, shared where the world shares it (a virus's code in
- * every organism it has infected, an import's in all its copies), since
- * the rules compare codes by identity. A world loaded goes on exactly as
+/* A whole world in a file (.b3w): the parameters, the carbon (the CO2 in
+ * every cell of the water), the dice's state, every organism as it stands
+ * between two frames, and every genetic code once, shared where the world
+ * shares it (a virus's code in every organism it has infected, an
+ * import's in all its copies), since the rules compare codes by
+ * identity. A world loaded goes on exactly as
  * the one saved would have, frame for frame (tests/check.c checks this).
  *
  * The format is this program's own: little-endian, doubles as their bits,

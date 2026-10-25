@@ -42,7 +42,11 @@ bool world_option(WorldOptions *o, int argc, char **argv, int *i)
     } else if (strcmp(a, "--organisms") == 0 && more)
         P.initial_organisms = atoi(argv[++*i]);
     else if (strcmp(a, "--co2") == 0 && more)
-        P.initial_co2 = strtod(argv[++*i], NULL);
+        P.co2_density = strtod(argv[++*i], NULL);
+    else if (strcmp(a, "--light") == 0 && more)
+        P.light_depth = strtod(argv[++*i], NULL);
+    else if (strcmp(a, "--sight") == 0 && more)
+        P.sight = strtod(argv[++*i], NULL);
     else if (strcmp(a, "--pitch") == 0 && more)
         P.pitch_prob = atoi(argv[++*i]);
     else if (strcmp(a, "--radius") == 0 && more)
@@ -54,6 +58,10 @@ bool world_option(WorldOptions *o, int argc, char **argv, int *i)
     }
     else if (strcmp(a, "--copies") == 0 && more)
         o->copies = atoi(argv[++*i]);
+    else if (strcmp(a, "--set") == 0 && *i + 2 < argc && params_field(argv[*i + 1])) {
+        params_put(&P, params_field(argv[*i + 1]), strtod(argv[*i + 2], NULL));
+        *i += 2;
+    }
     else
         return false;
     return true;
@@ -65,12 +73,14 @@ bool world_options_check(char *err, int errlen)
     double thinnest = 2 * P.segment_radius + 1;
     if (!(P.segment_radius > 0 && P.segment_radius <= 100) || P.world_width <= thinnest ||
         P.world_height <= thinnest || P.world_depth <= thinnest || P.pitch_prob < 0 ||
-        P.pitch_prob > 100 || !(P.initial_co2 >= 0 && P.initial_co2 <= 1e12) ||
+        P.pitch_prob > 100 || !(P.co2_density >= 0 && P.co2_density <= 1e9) ||
+        !(P.light_depth >= 0) || !(P.sight >= 0 && P.sight <= 10000) ||
         P.initial_organisms < 0) {
         snprintf(err, (size_t)errlen,
                  "the radius must be above 0 (at most 100), every side of the world more than "
-                 "2 radii + 1, the pitch 0 to 100, the CO2 0 or more and the organisms 0 or "
-                 "more");
+                 "2 radii + 1, the pitch 0 to 100, the CO2 0 or more (per million cubic "
+                 "units), the light's depth 0 or more, the sight 0 to 10000 and the "
+                 "organisms 0 or more");
         return false;
     }
     return true;

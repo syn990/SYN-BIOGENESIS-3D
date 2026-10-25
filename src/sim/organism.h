@@ -17,15 +17,17 @@
  */
 
 /* An organism: a body of coloured segments that moves, eats, breathes,
- * grows, collides and reproduces, by 0.9's rules, in a box instead of on a
- * plane.
+ * grows, collides and reproduces, grown from 0.9's rules into a box of
+ * water.
  *
  * What changed from 0.9 and why is in docs/DESIGN.md. In short: segments
  * are capsules (lines of thickness 2 * segment_radius) because two lines in
  * space practically never cross; the body is a rigid body with an
- * orientation, a velocity, a spin vector and an inertia tensor; and every
- * energy rule (light, eating, infection, killing, breathing, ageing,
- * reproduction) is 0.9's unchanged.
+ * orientation, a velocity, a spin vector and an inertia tensor; a leaf
+ * catches the light it lies across, at its depth and in the shade above it;
+ * every breath goes into the water where it is taken; the dead sink; and an
+ * organism senses what is around it and its cilia push it along its drives.
+ * Eating, infection, killing, ageing and reproduction are 0.9's.
  */
 #ifndef SIM_ORGANISM_H
 #define SIM_ORGANISM_H
@@ -47,6 +49,8 @@ typedef struct Organism {
     struct World *world;
     int parent_id;
     int id;
+    int founder;          /* the id of the founder whose line this is */
+    int infected_founder; /* the line of infected_gc */
     int generation;
     int infected_generation;
     int total_children;
@@ -69,6 +73,9 @@ typedef struct Organism {
     M3 inertia, inv_inertia; /* body frame */
     double inertia_trace;
     double radius; /* centre of mass to the farthest capsule surface */
+    double green_frac, hunter_frac; /* shares of the body's length: green; red, gray and white */
+    V3 aim; /* the way its drives pull it, and how hard: at most 1 */
+    double lit; /* the light on its centre this frame */
     V3 lo, hi;     /* world bounding box of the capsules */
     int growth_ratio; /* 16 = newborn ... 1 = adult */
     double energy;
@@ -93,8 +100,18 @@ void org_free(Organism *o);
 bool org_random_create(Organism *o);
 /* A founder with a given code, placed at random (an imported being). */
 bool org_place_with_code(Organism *o, GeneticCode *gc);
+/* A founder with a given code with its centre of mass at p (a code pasted
+ * where it was asked for), its energy from the water's CO2; false if it
+ * doesn't fit there or something is in the way. No dice are drawn but
+ * org_new's turn. */
+bool org_place_at(Organism *o, GeneticCode *gc, V3 p);
 /* A child of parent: mutated code, placed beside it. */
 bool org_inherit(Organism *o, Organism *parent, bool first);
+/* Its children now, as when it has the energy for them (Force
+ * reproduction). */
+void org_reproduce(Organism *o);
+/* A corpse alive again, with its genes' colours, young (0.9's Revive). */
+void org_revive(Organism *o);
 
 /* The body a code grows, segment by segment (ngenes x symmetry of them),
  * from the arms' shared root, with its gene lengths divided by scale (1 for
@@ -116,5 +133,11 @@ bool org_contact(Organism *o, Organism *other);
 /* How level the body lies: |the body's up axis . world up|, 1 = flat on
  * the floor's plane, 0 = standing on its edge. */
 double org_levelness(const Organism *o);
+
+/* An organism looks around every this many frames. */
+#define THINK_EVERY 8
+/* Where its drives pull it now, from what it senses: aim. */
+void org_sense(Organism *o);
+
 
 #endif

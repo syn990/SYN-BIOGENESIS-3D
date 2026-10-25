@@ -34,12 +34,15 @@ typedef struct {
 
 
 static const Entry k_entries[] = {
-    {"green", "Leaf: makes energy from CO2.",
-     "Every frame it turns CO2 from the air into energy, as much as its length allows."},
+    {"green", "Leaf: makes energy from light and CO2.",
+     "Every frame it turns CO2 dissolved around it into energy, as much as the light at its depth "
+     "and its length lying across that light allow. It turns itself to lie level."},
     {"red", "Eater: bites whatever it touches.",
      "Takes half its length in energy from any segment it touches; only blue stops it."},
-    {"cyan", "Mover: kicks the organism in random directions.",
-     "Each frame there is an 8 in 100 chance that it pushes the organism along its own direction."},
+    {"cyan", "Mover: swims the organism to its height and where its senses pull it.",
+     "Each frame there is an 8 in 100 chance that it pushes the organism along its own length, "
+     "whichever way is nearer where it is going: up or down to the height its line keeps to, and "
+     "across as its drives pull it. A body bent in 3D can swim any way."},
     {"blue", "Shield: stops red, white and gray.",
      "Blocks bites, infections and kills, at no cost with the default parameters."},
     {"white", "Virus: makes others give birth to its kind.",
@@ -49,7 +52,13 @@ static const Entry k_entries[] = {
      "For 1 energy it kills the organism it touches outright. Blue stops it."},
     {"yellow", "Fertility: one more child per segment.",
      "Every yellow segment is one more child at each birth."},
-    {"brown", "Dead.", "A dead body. Parents and children never attack each other while alive."},
+    {"purple", "Methane eater: lives on what the dead rot into.",
+     "Color Mod's chemotroph. Every frame it turns methane dissolved around it into energy, by its "
+     "whole length and whatever the light, as a leaf does CO2. The dead rot into methane where they "
+     "lie, and they sink, so it is richest low, around the rotting floor."},
+    {"brown", "Dead.",
+     "A dead body. It sinks, and rots into methane where it comes to rest. Parents and children never "
+     "attack each other while alive."},
 };
 
 

@@ -13,11 +13,11 @@
  */
 
 /* Thin guide lines: the world's box, the floor's grid, the marker on the
- * selected organism. Blended, depth-tested, fogged like the capsules. */
+ * selected organism. Blended, depth-tested, fogged like the bodies. */
 #ifndef RENDER_LINES_H
 #define RENDER_LINES_H
 
-#include "render/capsules.h"
+#include "render/scene.h"
 
 typedef struct {
     float p[3];

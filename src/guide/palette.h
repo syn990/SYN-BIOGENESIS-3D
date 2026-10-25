@@ -43,7 +43,7 @@ typedef enum {
 
 #define SYN_NCOL COL_COUNT
 #define SYN_DEAD COL_BROWN
-#define GENE_COLORS 7
+#define GENE_COLORS 8
 
 int syn_col(uint32_t colour);
 void syn_col_rgb(int slot, uint8_t *r, uint8_t *g, uint8_t *b);

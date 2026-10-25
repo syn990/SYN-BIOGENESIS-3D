@@ -65,7 +65,7 @@ static int target_ensure(Target *t, int w, int h, GLenum fmt, int want_depth) {
     glGenTextures(1, &t->color);
     glBindTexture(GL_TEXTURE_2D, t->color);
     glTexImage2D(GL_TEXTURE_2D, 0, (GLint)fmt, w, h, 0, GL_RGBA,
-                 fmt == GL_RGBA16F ? GL_HALF_FLOAT : GL_UNSIGNED_BYTE, NULL);
+                 fmt == GL_RGBA8 ? GL_UNSIGNED_BYTE : GL_HALF_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -258,17 +258,19 @@ void lighting_scene_end(void) {
     if (!g_in_scene || !g_scene.fbo) { g_in_scene = 0; return; }
     g_in_scene = 0;
     int w = g_scene.w, h = g_scene.h;
-    int hw = w / 2 > 0 ? w / 2 : 1, hh = h / 2 > 0 ? h / 2 : 1;
+    /* the bloom at a quarter of the size: a halo is soft anyway, and a
+     * sixteenth of the pixels to blur */
+    int hw = w / 4 > 0 ? w / 4 : 1, hh = h / 4 > 0 ? h / 4 : 1;
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 
     GLuint scene_color = g_scene.color;
 
-    /* bloom: bright-pass to half res, then three widening blur rounds */
+    /* bloom: bright-pass to quarter res, then three widening blur rounds */
     int have_bloom = g_graphics.bloom_strength > 0.001f
-                  && target_ensure(&g_bloom_a, hw, hh, GL_RGBA16F, 0)
-                  && target_ensure(&g_bloom_b, hw, hh, GL_RGBA16F, 0);
+                  && target_ensure(&g_bloom_a, hw, hh, GL_R11F_G11F_B10F, 0)
+                  && target_ensure(&g_bloom_b, hw, hh, GL_R11F_G11F_B10F, 0);
     if (have_bloom) {
         glBindFramebuffer(GL_FRAMEBUFFER, g_bloom_a.fbo);
         glViewport(0, 0, hw, hh);
@@ -280,7 +282,8 @@ void lighting_scene_end(void) {
         glUseProgram(g_prog_blur);
         glUniform1i(glGetUniformLocation(g_prog_blur, "uSrc"), 0);
         GLint dir_loc = glGetUniformLocation(g_prog_blur, "uDir");
-        static const float widen[3] = { 1.0f, 1.8f, 2.8f };
+        /* half the half-res widths: the same halo on the screen */
+        static const float widen[3] = { 0.5f, 0.9f, 1.4f };
         for (int i = 0; i < 3; i++) {
             glBindFramebuffer(GL_FRAMEBUFFER, g_bloom_b.fbo);
             glUseProgram(g_prog_blur);

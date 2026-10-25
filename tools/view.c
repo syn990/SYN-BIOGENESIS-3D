@@ -77,7 +77,7 @@ int main(int argc, char **argv)
         } else if (!strcmp(a, "--organisms") && more)
             P.initial_organisms = atoi(argv[++i]);
         else if (!strcmp(a, "--co2") && more)
-            P.initial_co2 = atof(argv[++i]);
+            P.co2_density = atof(argv[++i]);
         else if (!strcmp(a, "--pitch") && more)
             P.pitch_prob = atoi(argv[++i]);
         else if (!strcmp(a, "--radius") && more)

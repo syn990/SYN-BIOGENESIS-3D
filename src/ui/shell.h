@@ -66,6 +66,41 @@
 #define ICON_TROPHY "\xef\x82\x91"
 #define ICON_SAVE "\xef\x83\x87"
 #define ICON_FORWARD "\xef\x81\x90"
+#define ICON_SUN "\xef\x86\x85"
+#define ICON_MOON "\xef\x86\x86"
+#define ICON_STEP "\xef\x81\x91"
+#define ICON_FIRE "\xef\x81\xad"
+#define ICON_DISPLAY "\xee\x85\xa3"
+#define ICON_SEARCH "\xef\x80\x82"
+#define ICON_OPEN "\xef\x81\xbc"
+#define ICON_FOLDER "\xef\x81\xbb"
+#define ICON_FILE "\xef\x80\x96"
+#define ICON_IMPORT "\xef\x95\xaf"
+#define ICON_EXPORT "\xef\x95\xae"
+#define ICON_FLASK "\xef\x83\x83"
+#define ICON_BOOK "\xef\x80\xad"
+#define ICON_BINOCULARS "\xef\x87\xa5"
+#define ICON_BARS "\xef\x83\x89"
+#define ICON_SEEDLING "\xef\x93\x98"
+#define ICON_WAND "\xee\x8b\x8a"
+#define ICON_PASTE "\xef\x83\xaa"
+#define ICON_COPY "\xef\x83\x85"
+#define ICON_IMAGE "\xef\x80\xbe"
+#define ICON_HEART_CRACK "\xef\x9e\xa9"
+#define ICON_HEART_PULSE "\xef\x88\x9e"
+#define ICON_SITEMAP "\xef\x83\xa8"
+#define ICON_CHECK "\xef\x80\x8c"
+#define ICON_GEAR "\xef\x80\x93"
+#define ICON_MAP "\xef\x89\xb8"
+#define ICON_EXPAND "\xef\x81\xa5"
+#define ICON_INFO "\xef\x81\x9a"
+#define ICON_KEYBOARD "\xef\x84\x9c"
+#define ICON_MICROSCOPE "\xef\x98\x90"
+#define ICON_WIND "\xef\x9c\xae"
+#define ICON_TRASH "\xef\x87\xb8"
+#define ICON_ZOOM_IN "\xef\x80\x8e"
+#define ICON_ZOOM_OUT "\xef\x80\x90"
+#define ICON_BACKUP "\xef\x87\x9a"
 
 #define SHELL_BAR_H 44
 #define SHELL_HINTS_H 26
@@ -79,6 +114,8 @@ typedef struct {
     bool disabled;
     bool on;
     const char *tip;
+    const char *section; /* its heading in the command list: "WORLD", "VIEW" */
+    const char *word;    /* its name in the console, or NULL */
 } ShellCommand;
 
 typedef struct {
@@ -114,7 +151,7 @@ typedef struct {
     Tone bar_tone[2];
     char kind[48];
     char about[300];
-    ShellCommand actions[8];
+    ShellCommand actions[12];
     int nactions;
     void (*draw_body)(void *ud, UIRect box);
     void *ud;
@@ -133,6 +170,14 @@ bool shell_theme_set(const char *name);
 void shell_theme_step(int by);
 /* "name  name  ..." of every theme, for the console */
 void shell_theme_list(void);
+/* The themes one by one, the one in use, and choosing one (kept). */
+int shell_theme_count(void);
+/* The window's other choices, kept with the theme (NULL: not set). */
+const char *shell_setting(const char *key);
+void shell_setting_set(const char *key, const char *value);
+const Theme *shell_theme_at(int i);
+int shell_theme_index(void);
+void shell_theme_pick(int i);
 
 /* The frame's interface: begin after the scene, end last. */
 void shell_begin(int w, int h);
@@ -162,5 +207,31 @@ void shell_print(ShellKind kind, const char *fmt, ...);
 const char *shell_console(int w, int top, int h, const char *const *words, int nwords);
 /* Splits a line into words in place ("quoted words" kept whole). */
 int shell_split(char *line, char **argv, int max);
+
+/* The command list (/, or the bar's glyph): every command under its
+ * heading, filtered by what is typed; up and down pick, Enter runs, Esc
+ * closes. Returns the id of the command run this frame, or 0. */
+void shell_launcher_open(void);
+bool shell_launcher_showing(void);
+int shell_launcher(int w, int h, const ShellCommand *c, int n);
+/* The command with this console word, or NULL; every command by its word,
+ * printed in the console under its heading. */
+const ShellCommand *shell_lookup(const ShellCommand *c, int n, const char *word);
+void shell_list(const ShellCommand *c, int n);
+
+/* A value that can be typed over, drawn right-aligned in r. A click on it
+ * (or Tab in the field drawn before it) makes it a line to type in, the
+ * whole value selected; Enter, Tab or a click elsewhere takes the line:
+ * true, with it in out. Escape gives the value back. While a field has the
+ * keyboard, keys go to it, not the window. id names the field from frame
+ * to frame. */
+bool shell_field(const void *id, UIRect r, TTF_Font *f, const char *value, char *out, size_t n);
+/* The same for words: drawn from the left (a name). */
+bool shell_text_field(const void *id, UIRect r, TTF_Font *f, const char *value, char *out, size_t n);
+/* The field takes the keyboard from the next frame, its value selected, as
+ * if clicked (a name to type in a file browser). */
+void shell_field_focus(const void *id, const char *value);
+/* Whether this field (NULL: any) has the keyboard. */
+bool shell_field_active(const void *id);
 
 #endif

@@ -8,5 +8,9 @@ __pycache__/
 /runs-*/
 /tools/film
 /tools/view
+/tools/founders
+/tests/arena_check
+/tests/syn_check
+/tests/telescope_check
 /dist/
 *.exe
