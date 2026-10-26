@@ -127,8 +127,8 @@ static void drives_sentence(const GeneticCode *gc, double depth, char *out, size
         snprintf(out + at, n - at, ".");
 }
 
-/* SYN-BIOGENESIS's kind (guide/kind.c: SYN-TREK's way of naming planets,
- * read from what the genes do) and its sentence, whether the body is flat,
+/* SYN-BIOGENESIS's kind (guide/kind.c, read from what the genes do) and
+ * its sentence, whether the body is flat,
  * as 0.9 grew them, or bent into the third dimension, and where it
  * steers. */
 static void describe(const Organism *o, char *kind, size_t kn, char *about, size_t an)

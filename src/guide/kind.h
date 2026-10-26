@@ -15,9 +15,8 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-/* What kind of being a genetic code makes, as SYN-TREK classes its planets:
- * a kind read from how much of the body does each job (its leaves, eaters,
- * killers...; syn/palette.h's roles, by length), a few traits, and a
+/* What kind of being a genetic code makes: a kind read from how much of
+ * the body does each job (its leaves, eaters, killers...; syn/palette.h's roles, by length), a few traits, and a
  * description composed from the book of words (assets/lexicon/species.txt,
  * syn/lexicon.h), tagged by the kind and seeded by the code itself, so a
  * code is described the same way every time and everywhere. */

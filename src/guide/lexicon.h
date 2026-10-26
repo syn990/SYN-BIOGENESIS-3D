@@ -15,8 +15,8 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-/* The book of words, as SYN-TREK keeps it (its src/game/lexicon.h): text
- * assembled from a seed, the same on every machine.
+/* The book of words: text assembled from a seed, the same on every
+ * machine.
  *
  * A BANK is a named list of phrases; a phrase may hold {references} to
  * other banks. A bank id may carry a tag ("habit.grazer"): a lookup for
@@ -25,7 +25,7 @@
  * bound variable (lexicon_set_var) says the variable instead, which is how
  * the facts of one species get into its sentence.
  *
- * The file is SYN-TREK's format:
+ * The file's format:
  *
  *   [bank]
  *   id=habit.grazer

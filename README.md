@@ -437,7 +437,7 @@ through them one by one).
 
 - **The bar** (waybar's): the speed, the living, the time, the dead, O2,
   CO2, CH4, kills, the frame rate, the theme, and MENU.
-- **The card** (SYN-TREK's target card), for a selected organism:
+- **The card**, for a selected organism:
   - its state and figures, and its life and energy as bars;
   - its depth and the light it has;
   - its kind and description, from SYN-BIOGENESIS's species kinds and book
@@ -795,10 +795,9 @@ The code comes by way of [SYN-BIOGENESIS](https://github.com/syn990/SYN-BIOGENES
 the C rewrite of 0.9. Each source file names what it was grown from.
 `src/sim/dmath.c` holds fdlibm's sine, cosine and exponential kernels,
 copyright (c) 1993 Sun Microsystems, freely distributable with their
-notice. The window, shader loader and lighting pipeline come from
-SYN-TREK. The SYN-OS skin and themes, the field guide, the species kinds
-and their book of words (`assets/lexicon`, SYN-TREK's lexicon format) come
-from SYN-BIOGENESIS, which follows SYN-DEBT. cglm (`third_party/cglm`) is
+notice. The SYN-OS skin and themes, the field guide, the species kinds
+and their book of words (`assets/lexicon`) come from SYN-BIOGENESIS,
+which follows SYN-DEBT. cglm (`third_party/cglm`) is
 copyright (c) 2015 Recep Aslantas, under the MIT licence.
 - **Fonts:** in `assets/fonts`, each with its licence file:
   - Noto Sans and SYN Terminal (Terminus, cut down and renamed), under the

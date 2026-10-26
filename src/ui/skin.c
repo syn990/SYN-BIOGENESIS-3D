@@ -1,9 +1,9 @@
 /* SYN-BIOGENESIS-3D: Biogenesis in three dimensions.
  * Copyright (C) 2026 syn990
  *
- * Part of the SYN-OS interface SYN-BIOGENESIS-3D shares with SYN-BIOGENESIS,
- * SYN-TREK and SYN-DEBT; taken from SYN-BIOGENESIS's src/synos, where it
- * follows SYN-DEBT's src/ui/skin.c. SYN-BIOGENESIS draws it with
+ * Part of the SYN-OS interface SYN-BIOGENESIS-3D shares with SYN-BIOGENESIS
+ * and SYN-DEBT; taken from SYN-BIOGENESIS's src/synos, where it follows
+ * SYN-DEBT's src/ui/skin.c. SYN-BIOGENESIS draws it with
  * SDL_Renderer; here it draws through ui/gl2d.c over the 3D scene, and only
  * those calls changed.
  *
@@ -731,7 +731,7 @@ void skin_keycap(UIRect r, TTF_Font *f, const char *key) {
         ink = t->text;
         break;
     default: {
-        /* SYN-TREK's key: a pale face, its front edge darker */
+        /* the key: a pale face, its front edge darker */
         Rgb face = t->light ? mix(t->text, t->bg, 0.18) : mix(t->text, t->bg, 0.22);
         rect(r.x, r.y, r.w, r.h - 3, face, 1);
         rect(r.x, r.y + r.h - 3, r.w, 3, mix(face, (Rgb){0, 0, 0}, 0.45), 1);

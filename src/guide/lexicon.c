@@ -15,8 +15,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-/* SYN-TREK's lexicon engine (src/game/lexicon.c there), sized for a
- * species book rather than a galaxy's. */
+/* The lexicon engine, sized for a species book. */
 #include "guide/lexicon.h"
 
 #include <stdio.h>
@@ -124,7 +123,7 @@ static int resolve(const char *id, const char *tag, char *out, size_t n)
     return pool_count(id);
 }
 
-/* SYN-TREK's scramble; the salt keeps "{word} and {word}" from repeating */
+/* The scramble; the salt keeps "{word} and {word}" from repeating */
 static unsigned lex_hash(unsigned seed, unsigned salt)
 {
     unsigned x = seed ^ (salt * 0x9e3779b9u);

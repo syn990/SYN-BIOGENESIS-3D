@@ -30,17 +30,15 @@ to, in [the water](#the-water):
    rigid-body physics, the determinism and bookkeeping tests, and the
    question the whole project rests on: does 0.9's life cope with a third
    dimension? See [the sweep](sweep/README.md).
-2. **The renderer, from SYN-TREK** (built). C11 with OpenGL 3.3 core
-   (libepoxy), cglm and SDL2, laid out as SYN-TREK is: `src/render/` and
-   `src/platform/` are the only code that calls GL or opens windows, and
-   `src/sim/` never touches either.
-   - **From SYN-TREK:**
+2. **The renderer** (built). C11 with OpenGL 3.3 core (libepoxy), cglm
+   and SDL2: `src/render/` and `src/platform/` are the only code that
+   calls GL or opens windows, and `src/sim/` never touches either.
+   - **The base:**
      - the window and its OpenGL 3.3 check;
      - the shader loader;
      - the lighting pipeline: an HDR scene buffer, bloom, ACES filmic
-       tonemapping and FXAA. It is cut down to what a world needs, without
-       the warp smear or the panels.
-   - **New:**
+       tonemapping and FXAA.
+   - **Built for this world:**
      - instanced flesh (`src/render/bodies.c`, first built as capsules):
        one mesh, shaped in the vertex shader by each segment's tissue
        (its colour) and patterned in the fragment shader, with two ends, a
@@ -59,8 +57,7 @@ to, in [the water](#the-water):
        them out per pixel, and they soften with distance.
      - the bloom at a quarter of the picture's size; the interface's 2D
        drawing sent in one upload a frame.
-     - an orbit camera. SYN-TREK's camera chases a ship, which is not what
-       a world needs.
+     - an orbit camera.
      - smooth motion: each organism is drawn between the pose it began the
        world's last frame in and the one it ended it in.
      - picking: a ray against every body's flesh.

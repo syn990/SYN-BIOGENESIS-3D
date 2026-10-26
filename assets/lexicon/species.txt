@@ -1,6 +1,6 @@
 # The book of words for species: what the SYN edition says a being is.
 #
-# SYN-TREK's format (src/syn/lexicon.h): a [bank] has an id and words=
+# The format (src/syn/lexicon.h): a [bank] has an id and words=
 # lines of phrases split on |; a phrase may name other banks in {braces}.
 # An id may carry a tag, the being's kind (src/syn/kind.c): a lookup for
 # `habit` on a grazer takes habit.grazer, else plain habit. "~" is an

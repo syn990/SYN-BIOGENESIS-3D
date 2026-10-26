@@ -1,9 +1,6 @@
 /* SYN-BIOGENESIS-3D: Biogenesis in three dimensions.
  * Copyright (C) 2026 syn990
  *
- * Taken from SYN-TREK's src/platform/window.c, without its screenshot
- * strips, logging and fullscreen toggle.
- *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; either version 2 of the License, or (at your
@@ -21,7 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* SYN-TREK's lesson: on Windows there is no terminal, so a driver that
+/* On Windows there is no terminal, so a driver that
    can't give OpenGL 3.3 must be said in a box or the program just
    vanishes. Elsewhere stderr (a box would hang headless harnesses). */
 static void window_fail(const char *what, const char *hint)

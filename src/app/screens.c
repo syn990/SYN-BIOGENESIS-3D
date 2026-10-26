@@ -466,7 +466,7 @@ void params_screen(App *a, int w, int h)
 void menu_screen(App *a, int w, int h)
 {
     const Fonts *fo = shell_fonts();
-    /* SYN-TREK's grid: 260px buttons, 48 tall, 30 across and 12 down,
+    /* the grid: 260px buttons, 48 tall, 30 across and 12 down,
      * starting 40% of the way down */
     float btn_h = 48, gap_x = 30, gap_y = 12, total_w = 260 * 2 + gap_x;
     int rows = 4;
@@ -536,7 +536,7 @@ void options_screen(App *a, int w, int h)
 {
     const Fonts *fo = shell_fonts();
     static float scroll;
-    /* a panel over the world, like SYN-TREK's Legends board */
+    /* a panel over the world */
     float pw = fminf((float)w * 0.86f, 1500), ph = (float)h * 0.84f;
     if (w < 1400)
         pw = (float)w - 48;

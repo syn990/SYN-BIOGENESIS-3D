@@ -576,7 +576,7 @@ int shell_card(int w, int h, const ShellCard *c)
         mid(fo->mono_small_bold, c->cells[i].value, cell.x + cell.w - 7, cell.y + chh * 0.5f,
             skin_tone(c->cells[i].tone), ALIGN_RIGHT);
     }
-    /* the bars: SYN-TREK's segments, the missing ones faint */
+    /* the bars: in segments, the missing ones faint */
     float by = top + (float)((c->ncells + cols - 1) / cols) * (chh + 6) + 4;
     for (int b = 0; b < 2; b++) {
         if (!c->bar_label[b])

@@ -1,9 +1,9 @@
 /* SYN-BIOGENESIS-3D: Biogenesis in three dimensions.
  * Copyright (C) 2026 syn990
  *
- * Part of the SYN-OS interface SYN-BIOGENESIS-3D shares with SYN-BIOGENESIS,
- * SYN-TREK and SYN-DEBT; taken from SYN-BIOGENESIS's src/synos, where it this file follows SYN-DEBT's src/ui/skin.h, drawn with
- * SDL_Renderer instead of OpenGL.
+ * Part of the SYN-OS interface SYN-BIOGENESIS-3D shares with SYN-BIOGENESIS
+ * and SYN-DEBT; taken from SYN-BIOGENESIS's src/synos, where it follows
+ * SYN-DEBT's src/ui/skin.h, drawn with SDL_Renderer instead of OpenGL.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -141,7 +141,7 @@ void skin_swatches(UIRect r, const Theme *t);             /* a theme's palette a
  * waybar style draws it. level 0 is normal, 1 waybar's .warning, 2 its
  * .critical (which blinks). Returns the tone to write in. */
 Tone skin_module(UIRect r, WidgetState st, int level);
-/* A readout's well, sunk into the panel (SYN-TREK's), in the family's way. */
+/* A readout's well, sunk into the panel, in the family's way. */
 void skin_well(UIRect r);
 /* A key, as the hints and buttons show it: "P", "Ctrl+S". Width for f. */
 float skin_keycap_width(TTF_Font *f, const char *key);

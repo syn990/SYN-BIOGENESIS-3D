@@ -23,7 +23,7 @@
  *   the menu       labwc's
  *   the console    a drop-down foot with a command line (`)
  *   the hints      SYN-OS's TUIs' status line, along the bottom
- *   the card       the selected organism, SYN-TREK's target card
+ *   the card       the selected organism, as a target card
  *
  * The look is the SYN-OS theme in use: the one SYN-OS has on unless another
  * is chosen. Text the machine writes is in SYN Terminal (Terminus); the
