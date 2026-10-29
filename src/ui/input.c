@@ -13,8 +13,10 @@
  */
 
 #include "ui/input.h"
+#include "ui/uimap.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define SOLIDS 64
@@ -43,8 +45,156 @@ static struct {
     bool blocked;
 } I = {.scale = 1};
 
+
+/* ---- syn-nav-alt: the interface map (ui/uimap.h) ---- */
+#define NAMED 256
+#define EVENTS 16
+typedef struct {
+    UIRect r;
+    char role[12];
+    char label[64];
+    bool disabled, active, hover;
+} Named;
+static struct {
+    int on; /* 0 unknown, 1 on, -1 off */
+    const char *path;
+    Named n[2][NAMED];
+    int nn[2];
+    long frame;
+    int w, h;
+    struct { long frame; char kind[8]; char label[64]; float x, y; bool ours; } ev[EVENTS];
+    int nev; /* total ever, the ring keeps the last EVENTS */
+    unsigned long last_hash;
+    long last_write;
+} M;
+
+static bool map_on(void)
+{
+    if (!M.on) {
+        M.path = getenv("SYN3D_UIMAP");
+        M.on = M.path && *M.path ? 1 : -1;
+    }
+    return M.on > 0;
+}
+
+static bool same_rect(UIRect a, UIRect b)
+{
+    return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
+}
+
+void uiin_map_size(int w, int h)
+{
+    M.w = w;
+    M.h = h;
+}
+
+void uiin_name(UIRect r, const char *role, const char *label, bool disabled, bool active)
+{
+    if (!map_on() || !label || !label[0])
+        return;
+    int c = I.cur;
+    for (int i = 0; i < M.nn[c]; i++)
+        if (same_rect(M.n[c][i].r, r))
+            return; /* named once a frame, by the first who draws it */
+    if (M.nn[c] >= NAMED)
+        return;
+    Named *n = &M.n[c][M.nn[c]++];
+    n->r = r;
+    snprintf(n->role, sizeof n->role, "%s", role);
+    snprintf(n->label, sizeof n->label, "%s", label);
+    n->disabled = disabled;
+    n->active = active;
+    n->hover = !I.blocked && skin_hit(r, (int)I.mx, (int)I.my);
+}
+
+static const char *named_at(UIRect r)
+{
+    int c = I.cur;
+    for (int i = 0; i < M.nn[c]; i++)
+        if (same_rect(M.n[c][i].r, r))
+            return M.n[c][i].label;
+    return "";
+}
+
+static void map_event(const char *kind, const char *label, float x, float y, bool ours)
+{
+    if (!map_on())
+        return;
+    int k = M.nev++ % EVENTS;
+    M.ev[k].frame = M.frame;
+    snprintf(M.ev[k].kind, sizeof M.ev[k].kind, "%s", kind);
+    snprintf(M.ev[k].label, sizeof M.ev[k].label, "%s", label ? label : "");
+    M.ev[k].x = x;
+    M.ev[k].y = y;
+    M.ev[k].ours = ours;
+}
+
+static void json_str(FILE *f, const char *s)
+{
+    fputc('"', f);
+    for (; *s; s++) {
+        unsigned char ch = (unsigned char)*s;
+        if (ch == '"' || ch == '\\')
+            fprintf(f, "\\%c", ch);
+        else if (ch < 0x20)
+            fprintf(f, "\\u%04x", ch);
+        else
+            fputc(ch, f);
+    }
+    fputc('"', f);
+}
+
+/* the frame just drawn (index c), written when it differs from the last */
+static void map_write(int c)
+{
+    unsigned long h = 1469598103934665603UL;
+    const unsigned char *p = (const unsigned char *)M.n[c];
+    for (size_t i = 0; i < sizeof(Named) * (size_t)M.nn[c]; i++)
+        h = (h ^ p[i]) * 1099511628211UL;
+    h ^= (unsigned long)M.nev * 31 + (unsigned long)(int)I.mx * 7 + (unsigned long)(int)I.my;
+    if (h == M.last_hash && M.frame - M.last_write < 60)
+        return;
+    M.last_hash = h;
+    M.last_write = M.frame;
+    char tmp[1100];
+    snprintf(tmp, sizeof tmp, "%s.tmp", M.path);
+    FILE *f = fopen(tmp, "w");
+    if (!f)
+        return;
+    fprintf(f, "{\"v\":1,\"app\":\"syn-biogenesis-3d\",\"frame\":%ld,\"ticks_ms\":%u,", M.frame,
+            (unsigned)SDL_GetTicks());
+    fprintf(f, "\"drawable\":[%d,%d],\"scale\":%g,\"pointer\":[%g,%g],\"buttons\":[%d,%d],\"typing\":%s,",
+            M.w, M.h, I.scale, I.mx, I.my, I.down[0], I.down[1], I.typing ? "true" : "false");
+    fputs("\"widgets\":[", f);
+    for (int i = 0; i < M.nn[c]; i++) {
+        Named *n = &M.n[c][i];
+        fprintf(f, "%s{\"role\":\"%s\",\"label\":", i ? "," : "", n->role);
+        json_str(f, n->label);
+        fprintf(f, ",\"x\":%g,\"y\":%g,\"w\":%g,\"h\":%g,\"hover\":%s,\"disabled\":%s,\"active\":%s}", n->r.x,
+                n->r.y, n->r.w, n->r.h, n->hover ? "true" : "false", n->disabled ? "true" : "false",
+                n->active ? "true" : "false");
+    }
+    fputs("],\"events\":[", f);
+    int first = M.nev > EVENTS ? M.nev - EVENTS : 0;
+    for (int i = first; i < M.nev; i++) {
+        int k = i % EVENTS;
+        fprintf(f, "%s{\"seq\":%d,\"frame\":%ld,\"kind\":\"%s\",\"label\":", i > first ? "," : "", i,
+                M.ev[k].frame, M.ev[k].kind);
+        json_str(f, M.ev[k].label);
+        fprintf(f, ",\"x\":%g,\"y\":%g,\"ours\":%s}", M.ev[k].x, M.ev[k].y, M.ev[k].ours ? "true" : "false");
+    }
+    fputs("]}\n", f);
+    fclose(f);
+    rename(tmp, M.path);
+}
+
 void uiin_begin_frame(float scale)
 {
+    if (map_on()) {
+        map_write(I.cur);
+        M.frame++;
+        M.nn[I.cur ^ 1] = 0;
+    }
     I.scale = scale > 0 ? scale : 1;
     I.released[0] = I.released[1] = false;
     I.pressed[0] = I.pressed[1] = false;
@@ -85,9 +235,11 @@ bool uiin_event(const SDL_Event *e)
             I.down_x[b] = I.mx;
             I.down_y[b] = I.my;
             I.ours[b] = on_solid(I.mx, I.my);
+            map_event(b ? "rdown" : "down", "", I.mx, I.my, I.ours[b]);
             return I.ours[b];
         }
         bool ours = I.ours[b];
+        map_event(b ? "rup" : "up", "", I.mx, I.my, ours);
         I.down[b] = false;
         I.released[b] = true;
         return ours;
@@ -125,8 +277,11 @@ bool uiin_over(UIRect r)
 
 static bool clicked_with(UIRect r, int b)
 {
-    return !I.blocked && I.released[b] && I.ours[b] && skin_hit(r, (int)I.mx, (int)I.my) &&
-           skin_hit(r, (int)I.down_x[b], (int)I.down_y[b]);
+    bool got = !I.blocked && I.released[b] && I.ours[b] && skin_hit(r, (int)I.mx, (int)I.my) &&
+               skin_hit(r, (int)I.down_x[b], (int)I.down_y[b]);
+    if (got && map_on())
+        map_event(b ? "rclick" : "click", named_at(r), I.mx, I.my, true);
+    return got;
 }
 
 bool uiin_clicked(UIRect r)

@@ -17,6 +17,7 @@
  */
 
 #include "ui/shell.h"
+#include "ui/uimap.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -301,6 +302,7 @@ void shell_theme_list(void)
 
 void shell_begin(int w, int h)
 {
+    uiin_map_size(w, h);
     gl2d_begin(w, h);
 }
 
@@ -369,6 +371,7 @@ int shell_bar(int w, const char *name, const ShellTab *tabs, int ntabs, const Sh
 
     float x = 10;
     UIRect mark = {x, pad, show_name ? mark_w : 34, bh};
+    uiin_name(mark, "launcher", "Every command", false, false);
     if (uiin_over(mark))
         skin_fill(mark, skin_theme()->panel_hover, 0.6f);
     skin_glyph(x + 15, cy + 1, 17, fo->icon);
@@ -384,6 +387,7 @@ int shell_bar(int w, const char *name, const ShellTab *tabs, int ntabs, const Sh
     for (int i = 0; i < ntabs && i < 16; i++) {
         bool full = level == 0 || (level == 1 && tabs[i].active);
         UIRect r = {x, pad, full ? tab_full[i] : tab_icon[i], bh};
+        uiin_name(r, "tab", tabs[i].label, tabs[i].disabled, tabs[i].active);
         bool h = !tabs[i].disabled && uiin_over(r);
         Tone t = skin_tab_chrome(r, (WidgetState){.hover = h, .active = tabs[i].active});
         Rgb c = skin_tone(tabs[i].disabled ? TONE_MUTED : t);
@@ -403,6 +407,7 @@ int shell_bar(int w, const char *name, const ShellTab *tabs, int ntabs, const Sh
 
     float rx = (float)w - 10 - menu_w;
     UIRect mb = {rx, pad, menu_w, bh};
+    uiin_name(mb, "button", "MENU", false, false);
     bool hb = uiin_over(mb);
     Tone mt = skin_button_chrome(mb, (WidgetState){.hover = hb}, false);
     mid(fo->bold, "MENU", mb.x + mb.w * 0.5f, cy, skin_tone(mt), ALIGN_CENTER);
@@ -414,6 +419,8 @@ int shell_bar(int w, const char *name, const ShellTab *tabs, int ntabs, const Sh
     rx -= 8;
     for (int i = 0; i < shown; i++) {
         UIRect r = {rx - mod_w[i], pad, mod_w[i], bh};
+        if (mods[i].id)
+            uiin_name(r, "module", mods[i].tip ? mods[i].tip : mods[i].text, false, false);
         bool h = uiin_over(r);
         Tone t = skin_module(r, (WidgetState){.hover = h && mods[i].id}, mods[i].level);
         float tx = r.x + 10;
@@ -638,6 +645,7 @@ int shell_card(int w, int h, const ShellCard *c)
         if (ax + bw > r.x + r.w - 10)
             break;
         UIRect b = {ax, ay, bw, 30};
+        uiin_name(b, "action", a->label, a->disabled, a->on);
         bool hv = !a->disabled && uiin_over(b);
         Tone tone = skin_button_chrome(
             b, (WidgetState){.hover = hv, .active = a->on, .disabled = a->disabled}, true);
@@ -723,6 +731,7 @@ int shell_menu(int w, int h)
             continue;
         }
         UIRect r = {x + 2, cy, mw - 4, row};
+        uiin_name(r, "menuitem", c->label, c->disabled, c->on);
         bool hv = !c->disabled && uiin_over(r);
         Rgb fg = c->disabled ? skin_tone(TONE_MUTED) : t->text;
         if (hv) {
@@ -1420,6 +1429,7 @@ int shell_launcher(int w, int h, const ShellCommand *c, int n)
         }
         const ShellCommand *cm = &c[rows[i].cmd];
         UIRect r = {card.x + 6, y, card.w - 12, row_h};
+        uiin_name(r, "command", cm->label, cm->disabled, cm->on);
         bool hv = !cm->disabled && uiin_over(r);
         int pi = -1;
         for (int j = 0; j < np; j++)

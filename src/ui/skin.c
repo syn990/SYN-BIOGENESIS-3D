@@ -18,6 +18,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "ui/skin.h"
+#include "ui/uimap.h"
 
 #include "ui/gl2d.h"
 
@@ -486,6 +487,7 @@ void skin_input(UIRect r, bool focused, bool hover, bool invalid) {
 }
 
 void skin_button_tone(UIRect r, TTF_Font *f, const char *label, WidgetState st, bool over_scene, Tone label_tone) {
+    uiin_name(r, "button", label, st.disabled, st.active);
     Tone tone = skin_button_chrome(r, st, over_scene);
     if (label_tone != TONE_COUNT && tone != TONE_ON_ACCENT) tone = label_tone;
     label_in(r, f, label, tone, st.disabled ? 0.45f : 1.0f);
@@ -544,6 +546,7 @@ Tone skin_button_chrome(UIRect r, WidgetState st, bool over_scene) {
 }
 
 void skin_tab(UIRect r, TTF_Font *f, const char *label, WidgetState st) {
+    uiin_name(r, "tab", label, st.disabled, st.active);
     label_in(r, f, label, skin_tab_chrome(r, st), 1.0f);
 }
 
